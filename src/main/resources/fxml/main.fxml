@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.controlsfx.control.StatusBar?>
+
+<VBox xmlns="http://javafx.com/javafx/11.0.1"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.projectvisualizer.controllers.MainController"
+      stylesheets="@/styles/styles.css">
+
+    <MenuBar>
+        <Menu text="File">
+            <MenuItem text="Open Project" onAction="#handleOpenProject"/>
+            <MenuItem text="Export Diagram" onAction="#handleExportDiagram"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="Exit" onAction="#handleExit"/>
+        </Menu>
+        <Menu text="View">
+            <MenuItem text="Zoom In"/>
+            <MenuItem text="Zoom Out"/>
+            <MenuItem text="Reset View"/>
+        </Menu>
+        <Menu text="Settings">
+            <MenuItem text="Preferences" onAction="#handleSettings"/>
+        </Menu>
+        <Menu text="Help">
+            <MenuItem text="About CodeCartographer"/>
+        </Menu>
+    </MenuBar>
+
+    <SplitPane dividerPositions="0.2" VBox.vgrow="ALWAYS">
+        <!-- Project Tree Panel -->
+        <VBox>
+            <Label text="Project Structure" styleClass="panel-header"/>
+            <TreeView fx:id="projectTreeView" VBox.vgrow="ALWAYS"/>
+        </VBox>
+
+        <!-- Visualization Panel -->
+        <TabPane fx:id="visualizationTabPane" VBox.vgrow="ALWAYS">
+            <Tab text="Architecture Diagram" closable="false">
+                <ScrollPane>
+                    <!-- Graph visualization will be added here programmatically -->
+                </ScrollPane>
+            </Tab>
+        </TabPane>
+    </SplitPane>
+
+    <!-- Status Bar -->
+    <StatusBar fx:id="statusBar">
+        <leftItems>
+            <Label fx:id="statusLabel" text="Ready"/>
+        </leftItems>
+        <rightItems>
+            <ProgressBar fx:id="analysisProgressBar" prefWidth="200"/>
+        </rightItems>
+    </StatusBar>
+</VBox>
