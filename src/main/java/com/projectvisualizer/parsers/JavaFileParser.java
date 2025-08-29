@@ -1,15 +1,15 @@
 package com.projectvisualizer.parsers;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.CodeField;
 import com.projectvisualizer.models.CodeMethod;
-
-import com.github.javaparser.StaticJavaParser;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -24,18 +24,16 @@ public class JavaFileParser {
         try (FileInputStream in = new FileInputStream(javaFile)) {
             CompilationUnit cu = StaticJavaParser.parse(in);
 
-            // Extract package name
             String packageName = cu.getPackageDeclaration()
                     .map(pd -> pd.getNameAsString())
                     .orElse("");
 
-            // Extract class information
             cu.accept(new ClassVisitor(javaFile, packageName), components);
 
-            // For each component, extract fields and methods
             for (CodeComponent component : components) {
                 cu.accept(new FieldVisitor(), component);
                 cu.accept(new MethodVisitor(), component);
+                cu.accept(new ConstructorVisitor(), component);
             }
         }
 
@@ -63,8 +61,7 @@ public class JavaFileParser {
             component.setFilePath(javaFile.getAbsolutePath());
             component.setLanguage("java");
 
-            // Get extends and implements
-            if (n.getExtendedTypes().isNonEmpty()) {
+            if (!n.getExtendedTypes().isEmpty()) {
                 component.setExtendsClass(n.getExtendedTypes().get(0).getNameAsString());
             }
 
@@ -85,27 +82,33 @@ public class JavaFileParser {
                 field.setName(v.getNameAsString());
                 field.setType(n.getElementType().asString());
                 field.setVisibility(n.getAccessSpecifier().asString());
+
+                // Check for dependency injection annotations
+                boolean isInjected = n.getAnnotations().stream()
+                        .anyMatch(ann -> {
+                            String annName = ann.getNameAsString().toLowerCase();
+                            return annName.contains("autowired") ||
+                                    annName.contains("inject") ||
+                                    annName.contains("resource");
+                        });
+
+                if (isInjected) {
+                    component.getInjectedDependencies().add(n.getElementType().asString());
+                }
+
                 component.getFields().add(field);
 
                 // Add dependency if it's a custom type
                 String fieldType = n.getElementType().asString();
                 if (!isPrimitiveType(fieldType) && !fieldType.startsWith("java.")) {
-                    // This would need to be enhanced to handle imports properly
-                    // For now, we'll just add the type name as a dependency
                     CodeComponent dependency = new CodeComponent();
                     dependency.setId(fieldType);
                     dependency.setName(fieldType);
-                    dependency.setType("class"); // Assume it's a class
+                    dependency.setType("class");
                     component.getDependencies().add(dependency);
                 }
             });
             super.visit(n, component);
-        }
-
-        private boolean isPrimitiveType(String type) {
-            return type.equals("int") || type.equals("long") || type.equals("double") ||
-                    type.equals("float") || type.equals("boolean") || type.equals("char") ||
-                    type.equals("byte") || type.equals("short") || type.equals("void");
         }
     }
 
@@ -123,6 +126,45 @@ public class JavaFileParser {
 
             component.getMethods().add(method);
             super.visit(n, component);
+        }
+    }
+
+    private static class ConstructorVisitor extends VoidVisitorAdapter<CodeComponent> {
+        @Override
+        public void visit(ConstructorDeclaration n, CodeComponent component) {
+            boolean isInjected = n.getAnnotations().stream()
+                    .anyMatch(ann -> {
+                        String annName = ann.getNameAsString().toLowerCase();
+                        return annName.contains("autowired") ||
+                                annName.contains("inject");
+                    });
+
+            if (isInjected) {
+                n.getParameters().forEach(p -> {
+                    String paramType = p.getType().asString();
+                    if (!isPrimitiveType(paramType) && !paramType.startsWith("java.")) {
+                        component.getInjectedDependencies().add(paramType);
+                    }
+                });
+            }
+            super.visit(n, component);
+        }
+    }
+
+    // Utility method for primitive type checking
+    private static boolean isPrimitiveType(String type) {
+        switch(type) {
+            case "byte":
+            case "short":
+            case "int":
+            case "long":
+            case "float":
+            case "double":
+            case "boolean":
+            case "char":
+                return true;
+            default:
+                return false;
         }
     }
 }

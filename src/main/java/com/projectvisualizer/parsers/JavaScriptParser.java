@@ -37,6 +37,9 @@ public class JavaScriptParser {
                 component.setExtendsClass(extendsClass);
             }
 
+            // Look for dependency injection in JavaScript/TypeScript
+            findJsInjections(content, component);
+
             components.add(component);
         }
 
@@ -55,6 +58,9 @@ public class JavaScriptParser {
                 component.setFilePath(file.getAbsolutePath());
                 component.setLanguage(fileName.endsWith(".ts") || fileName.endsWith(".tsx") ? "typescript" : "javascript");
 
+                // Look for dependency injection in function components
+                findJsInjections(content, component);
+
                 components.add(component);
             }
 
@@ -72,10 +78,57 @@ public class JavaScriptParser {
                 component.setFilePath(file.getAbsolutePath());
                 component.setLanguage(fileName.endsWith(".ts") || fileName.endsWith(".tsx") ? "typescript" : "javascript");
 
+                // Look for dependency injection in function components
+                findJsInjections(content, component);
+
                 components.add(component);
             }
         }
 
         return components;
+    }
+
+    private void findJsInjections(String content, CodeComponent component) {
+        // Pattern for Angular-style constructor injection
+        Pattern angularPattern = Pattern.compile("constructor\\s*\\([^)]*\\b(private|public|readonly)?\\s*([^:)]+)\\s*:[^)]*\\)");
+        Matcher angularMatcher = angularPattern.matcher(content);
+
+        while (angularMatcher.find()) {
+            String dependencyType = angularMatcher.group(2).trim();
+            component.getInjectedDependencies().add(dependencyType);
+        }
+
+        // Pattern for property injection with decorators
+        Pattern decoratorPattern = Pattern.compile("@(Inject|Injectable|Autowired)\\s*(\\([^)]*\\))?\\s*[^=]*=[^;]*;");
+        Matcher decoratorMatcher = decoratorPattern.matcher(content);
+
+        while (decoratorMatcher.find()) {
+            // Extract the type from the assignment
+            Pattern typePattern = Pattern.compile(":\\s*(\\w+)");
+            Matcher typeMatcher = typePattern.matcher(decoratorMatcher.group(0));
+
+            if (typeMatcher.find()) {
+                String dependencyType = typeMatcher.group(1);
+                component.getInjectedDependencies().add(dependencyType);
+            }
+        }
+
+        // Pattern for React context or hooks
+        Pattern useContextPattern = Pattern.compile("useContext\\(([^)]+)\\)");
+        Matcher useContextMatcher = useContextPattern.matcher(content);
+
+        while (useContextMatcher.find()) {
+            String contextType = useContextMatcher.group(1);
+            component.getInjectedDependencies().add(contextType);
+        }
+
+        // Pattern for dependency injection libraries (Inversify, TSyringe, etc.)
+        Pattern diLibPattern = Pattern.compile("(container\\.get|inject|resolve)\\(([^)]+)\\)");
+        Matcher diLibMatcher = diLibPattern.matcher(content);
+
+        while (diLibMatcher.find()) {
+            String dependencyType = diLibMatcher.group(2);
+            component.getInjectedDependencies().add(dependencyType);
+        }
     }
 }

@@ -43,6 +43,78 @@ public class XmlParser {
             components.add(component);
         }
 
+        // For Spring XML configuration files
+        boolean isSpringConfig = fileName.endsWith("-context.xml") ||
+                fileName.endsWith("-config.xml") ||
+                content.contains("<beans") ||
+                content.contains("<context:component-scan");
+
+        if (isSpringConfig) {
+            // Parse bean definitions
+            Pattern beanPattern = Pattern.compile("<bean\\s+[^>]*class\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
+            Matcher beanMatcher = beanPattern.matcher(content);
+
+            while (beanMatcher.find()) {
+                String className = beanMatcher.group(1);
+
+                CodeComponent component = new CodeComponent();
+                component.setId(className);
+                component.setName(className.substring(className.lastIndexOf('.') + 1));
+                component.setType("bean");
+                component.setFilePath(file.getAbsolutePath());
+                component.setLanguage("xml");
+
+                // Find dependencies for this bean
+                findSpringDependencies(content, component, className);
+
+                components.add(component);
+            }
+
+            // Parse component scan to find all beans in the scanned packages
+            Pattern componentScanPattern = Pattern.compile("<context:component-scan\\s+[^>]*base-package\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
+            Matcher componentScanMatcher = componentScanPattern.matcher(content);
+
+            // Note: This would need to be combined with Java file parsing to find actual components
+            while (componentScanMatcher.find()) {
+                String basePackage = componentScanMatcher.group(1);
+                // We can't parse the actual components from XML alone
+                // This would need integration with the Java parser
+            }
+        }
+
         return components;
+    }
+
+    private void findSpringDependencies(String content, CodeComponent component, String className) {
+        // Find constructor arguments
+        Pattern constructorArgPattern = Pattern.compile("<constructor-arg[^>]*ref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
+        Matcher constructorArgMatcher = constructorArgPattern.matcher(content);
+
+        while (constructorArgMatcher.find()) {
+            String refBean = constructorArgMatcher.group(1);
+            component.getInjectedDependencies().add(refBean);
+        }
+
+        // Find property injections
+        Pattern propertyPattern = Pattern.compile("<property[^>]*ref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
+        Matcher propertyMatcher = propertyPattern.matcher(content);
+
+        while (propertyMatcher.find()) {
+            String refBean = propertyMatcher.group(1);
+            component.getInjectedDependencies().add(refBean);
+        }
+
+        // Find autowiring
+        Pattern autowirePattern = Pattern.compile("<bean[^>]*autowire\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>");
+        Matcher autowireMatcher = autowirePattern.matcher(content);
+
+        if (autowireMatcher.find()) {
+            String autowireMode = autowireMatcher.group(1);
+            if ("byName".equals(autowireMode) || "byType".equals(autowireMode)) {
+                // We can't determine the exact dependencies from XML alone
+                // This would need integration with the Java parser
+                component.getInjectedDependencies().add("AUTOWIRED");
+            }
+        }
     }
 }

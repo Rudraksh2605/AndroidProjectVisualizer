@@ -38,6 +38,22 @@ public class RelationshipBuilder {
                 dependsRel.setType("DEPENDS_ON");
                 relationships.add(dependsRel);
             }
+
+            for (String injectedDep : component.getInjectedDependencies()) {
+                ComponentRelationship injectionRel = new ComponentRelationship();
+                injectionRel.setSourceId(component.getId());
+
+                // Special handling for autowiring where we don't know the exact type
+                if ("AUTOWIRED".equals(injectedDep)) {
+                    injectionRel.setTargetId("AUTOWIRED_DEPENDENCY");
+                    injectionRel.setType("AUTOWIRED");
+                } else {
+                    injectionRel.setTargetId(findComponentIdByName(result, injectedDep));
+                    injectionRel.setType("INJECTED");
+                }
+
+                relationships.add(injectionRel);
+            }
         }
 
         result.setRelationships(relationships);

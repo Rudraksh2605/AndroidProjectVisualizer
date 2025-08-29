@@ -15,6 +15,8 @@ public class CodeComponent {
     private List<CodeMethod> methods = new ArrayList<>();
     private List<CodeField> fields = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
+    private List<String> injectedDependencies = new ArrayList<>();
+
 
     // Getters and setters
     public String getId() { return id; }
@@ -49,4 +51,7 @@ public class CodeComponent {
 
     public List<String> getAnnotations() { return annotations; }
     public void setAnnotations(List<String> annotations) { this.annotations = annotations; }
+
+    public List<String> getInjectedDependencies() { return injectedDependencies; }
+    public void setInjectedDependencies(List<String> injectedDependencies) { this.injectedDependencies = injectedDependencies; }
 }

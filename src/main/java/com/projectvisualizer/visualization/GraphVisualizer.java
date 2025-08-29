@@ -160,6 +160,10 @@ public class GraphVisualizer {
                     case "DEPENDS_ON":
                         edge.setStroke(Color.RED);
                         break;
+                    case "INJECTED":  // Add this case
+                        edge.setStroke(Color.PURPLE);
+                        edge.getStrokeDashArray().addAll(8d, 2d, 2d, 2d);
+                        break;
                     default:
                         edge.setStroke(Color.GRAY);
                 }

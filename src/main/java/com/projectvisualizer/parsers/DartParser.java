@@ -40,6 +40,9 @@ public class DartParser {
                 }
             }
 
+            // Look for dependency injection in Dart (get_it, injectable, etc.)
+            findDartInjections(content, component);
+
             components.add(component);
         }
 
@@ -59,9 +62,56 @@ public class DartParser {
             component.setLanguage("dart");
             component.setExtendsClass(widgetType);
 
+            // Look for dependency injection in widgets
+            findDartInjections(content, component);
+
             components.add(component);
         }
 
         return components;
+    }
+
+    private void findDartInjections(String content, CodeComponent component) {
+        // Pattern for get_it dependency injection
+        Pattern getItPattern = Pattern.compile("getIt\\.get<(\\w+)>\\(\\)");
+        Matcher getItMatcher = getItPattern.matcher(content);
+
+        while (getItMatcher.find()) {
+            String dependencyType = getItMatcher.group(1);
+            component.getInjectedDependencies().add(dependencyType);
+        }
+
+        // Pattern for injectable's @inject annotation
+        Pattern injectablePattern = Pattern.compile("@inject\\s+[^\\n]*\\s+(\\w+)\\s+([^;]+);");
+        Matcher injectableMatcher = injectablePattern.matcher(content);
+
+        while (injectableMatcher.find()) {
+            String dependencyType = injectableMatcher.group(1);
+            component.getInjectedDependencies().add(dependencyType);
+        }
+
+        // Pattern for constructor injection with @inject annotation
+        Pattern constructorPattern = Pattern.compile("@inject\\s+[^\\n]*\\s+(\\w+)\\s*\\([^)]*\\)");
+        Matcher constructorMatcher = constructorPattern.matcher(content);
+
+        if (constructorMatcher.find()) {
+            String className = constructorMatcher.group(1);
+
+            // Extract constructor parameters
+            Pattern paramPattern = Pattern.compile("this\\.(\\w+)\\s*:\\s*super\\.key");
+            Matcher paramMatcher = paramPattern.matcher(constructorMatcher.group(0));
+
+            while (paramMatcher.find()) {
+                String paramName = paramMatcher.group(1);
+                // We'll need to infer the type from field declarations
+                Pattern fieldPattern = Pattern.compile("final\\s+(\\w+)\\s+" + paramName + "\\s*;");
+                Matcher fieldMatcher = fieldPattern.matcher(content);
+
+                if (fieldMatcher.find()) {
+                    String dependencyType = fieldMatcher.group(1);
+                    component.getInjectedDependencies().add(dependencyType);
+                }
+            }
+        }
     }
 }
