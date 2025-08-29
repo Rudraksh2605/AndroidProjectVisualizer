@@ -9,6 +9,7 @@ import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -16,6 +17,8 @@ import javafx.stage.DirectoryChooser;
 import org.controlsfx.control.StatusBar;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainController {
 
@@ -141,7 +144,67 @@ public class MainController {
         dependenciesTab.setContent(createDependenciesView(result));
         dependenciesTab.setClosable(false);
 
-        visualizationTabPane.getTabs().addAll(diagramTab, componentsTab, dependenciesTab);
+        // Statistics Tab
+        Tab statisticsTab = new Tab("Statistics");
+        statisticsTab.setContent(createStatisticsView(result));
+        statisticsTab.setClosable(false);
+
+        visualizationTabPane.getTabs().addAll(diagramTab, componentsTab, dependenciesTab, statisticsTab);
+    }
+
+    private ScrollPane createStatisticsView(ProjectAnalysisResult result) {
+        VBox statsBox = new VBox(15);
+        statsBox.setPadding(new Insets(15));
+
+        Label titleLabel = new Label("Project Statistics");
+        titleLabel.setStyle("-fx-font-size: 16; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+
+        GridPane statsGrid = new GridPane();
+        statsGrid.setHgap(10);
+        statsGrid.setVgap(8);
+        statsGrid.setPadding(new Insets(10));
+
+        // Add statistics
+        addStatistic(statsGrid, 0, "Total Components", String.valueOf(result.getComponents().size()));
+        addStatistic(statsGrid, 1, "Total Relationships", String.valueOf(result.getRelationships().size()));
+
+        // Count by type
+        Map<String, Integer> typeCounts = new HashMap<>();
+        for (CodeComponent comp : result.getComponents()) {
+            typeCounts.put(comp.getType(), typeCounts.getOrDefault(comp.getType(), 0) + 1);
+        }
+
+        int row = 2;
+        for (Map.Entry<String, Integer> entry : typeCounts.entrySet()) {
+            addStatistic(statsGrid, row++, entry.getKey() + " Components", String.valueOf(entry.getValue()));
+        }
+
+        // Count by language
+        Map<String, Integer> languageCounts = new HashMap<>();
+        for (CodeComponent comp : result.getComponents()) {
+            languageCounts.put(comp.getLanguage(), languageCounts.getOrDefault(comp.getLanguage(), 0) + 1);
+        }
+
+        for (Map.Entry<String, Integer> entry : languageCounts.entrySet()) {
+            addStatistic(statsGrid, row++, entry.getKey() + " Files", String.valueOf(entry.getValue()));
+        }
+
+        statsBox.getChildren().addAll(titleLabel, statsGrid);
+
+        ScrollPane scrollPane = new ScrollPane(statsBox);
+        scrollPane.setFitToWidth(true);
+
+        return scrollPane;
+    }
+
+    private void addStatistic(GridPane grid, int row, String label, String value) {
+        Label statLabel = new Label(label + ":");
+        statLabel.setStyle("-fx-font-weight: bold;");
+
+        Label statValue = new Label(value);
+
+        grid.add(statLabel, 0, row);
+        grid.add(statValue, 1, row);
     }
 
     private ScrollPane createComponentsView(ProjectAnalysisResult result) {
