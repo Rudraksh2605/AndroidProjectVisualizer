@@ -13,6 +13,14 @@ public class XmlParser {
         List<CodeComponent> components = new ArrayList<>();
         String content = new String(Files.readAllBytes(file.toPath()));
         String fileName = file.getName();
+        String filePath = file.getAbsolutePath();
+
+        if (fileName.contains("navigation") && content.contains("<navigation")) {
+            NavigationGraphParser navParser = new NavigationGraphParser();
+            components.addAll(navParser.parse(file));
+            return components;
+        }
+
 
         // For Android XML files, check if it's a layout file
         boolean isLayout = fileName.startsWith("activity_") || fileName.startsWith("fragment_") ||
@@ -26,6 +34,8 @@ public class XmlParser {
             component.setType("layout");
             component.setFilePath(file.getAbsolutePath());
             component.setLanguage("xml");
+            component.setLayer("UI");
+
 
             // Find custom views used in this layout
             Pattern customViewPattern = Pattern.compile("<([a-zA-Z0-9]+\\.\\w+)\\w*");
@@ -37,6 +47,15 @@ public class XmlParser {
                 dependency.setId(viewName);
                 dependency.setName(viewName);
                 dependency.setType("view");
+                component.getDependencies().add(dependency);
+            }
+
+            String associatedComponent = findAssociatedComponent(file);
+            if (associatedComponent != null) {
+                CodeComponent dependency = new CodeComponent();
+                dependency.setId(associatedComponent);
+                dependency.setName(associatedComponent);
+                dependency.setType("class");
                 component.getDependencies().add(dependency);
             }
 
@@ -117,4 +136,70 @@ public class XmlParser {
             }
         }
     }
+
+    private String findAssociatedComponent(File layoutFile) {
+        String layoutName = layoutFile.getName().replace(".xml", "");
+
+        // Convert layout name to component name (activity_main -> MainActivity)
+        String componentName = convertLayoutNameToComponentName(layoutName);
+
+        // Look for Java/Kotlin files with this name
+        File projectDir = layoutFile.getParentFile().getParentFile().getParentFile(); // res/layout/.. -> src/main
+        File javaDir = new File(projectDir, "src/main/java");
+        File kotlinDir = new File(projectDir, "src/main/kotlin");
+
+        // Search in Java directory
+        String javaFile = findFileWithName(javaDir, componentName + ".java");
+        if (javaFile != null) return javaFile;
+
+        // Search in Kotlin directory
+        String kotlinFile = findFileWithName(kotlinDir, componentName + ".kt");
+        if (kotlinFile != null) return kotlinFile;
+
+        return null;
+    }
+
+    private String convertLayoutNameToComponentName(String layoutName) {
+        // Convert snake_case to PascalCase and add appropriate suffix
+        String[] parts = layoutName.split("_");
+        StringBuilder result = new StringBuilder();
+
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                result.append(Character.toUpperCase(part.charAt(0)))
+                        .append(part.substring(1));
+            }
+        }
+
+        // Add appropriate suffix based on layout type
+        if (layoutName.startsWith("activity_")) {
+            result.append("Activity");
+        } else if (layoutName.startsWith("fragment_")) {
+            result.append("Fragment");
+        } else if (layoutName.startsWith("dialog_")) {
+            result.append("Dialog");
+        } else if (layoutName.startsWith("item_")) {
+            result.append("Adapter");
+        }
+
+        return result.toString();
+    }
+
+    private String findFileWithName(File directory, String fileName) {
+        if (directory.exists() && directory.isDirectory()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isDirectory()) {
+                        String result = findFileWithName(file, fileName);
+                        if (result != null) return result;
+                    } else if (file.getName().equals(fileName)) {
+                        return file.getAbsolutePath();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
 }

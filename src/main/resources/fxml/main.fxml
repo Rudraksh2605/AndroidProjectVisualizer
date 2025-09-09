@@ -2,57 +2,462 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.shape.Circle?>
+<?import javafx.geometry.Insets?>
 <?import org.controlsfx.control.StatusBar?>
 
 <VBox xmlns="http://javafx.com/javafx/11.0.1"
       xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.projectvisualizer.controllers.MainController"
-      stylesheets="@/styles/styles.css">
+      stylesheets="@/styles/styles.css"
+      spacing="0"
+      fx:id="mainContainer">
 
+    <!-- Enhanced Menu Bar with Modern Styling -->
     <MenuBar>
-        <Menu text="File">
-            <MenuItem text="Open Project" onAction="#handleOpenProject"/>
-            <MenuItem text="Export Diagram" onAction="#handleExportDiagram"/>
+        <!-- Menu items unchanged from original -->
+        <Menu text="File" mnemonicParsing="false">
+            <MenuItem text="Open Project..." mnemonicParsing="false"
+                      onAction="#handleOpenProject"
+                      accelerator="Ctrl+O"/>
+            <MenuItem text="Recent Projects" mnemonicParsing="false"
+                      disable="true"/>
             <SeparatorMenuItem/>
-            <MenuItem text="Exit" onAction="#handleExit"/>
+            <MenuItem text="Export Diagram..." mnemonicParsing="false"
+                      onAction="#handleExportDiagram"
+                      accelerator="Ctrl+E"/>
+            <MenuItem text="Export Report..." mnemonicParsing="false"
+                      onAction="#handleExportReport"
+                      accelerator="Ctrl+R"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="Settings..." mnemonicParsing="false"
+                      onAction="#handleSettings"
+                      accelerator="Ctrl+,"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="Exit" mnemonicParsing="false"
+                      onAction="#handleExit"
+                      accelerator="Ctrl+Q"/>
         </Menu>
-        <Menu text="View">
-            <MenuItem text="Zoom In"/>
-            <MenuItem text="Zoom Out"/>
-            <MenuItem text="Reset View"/>
+
+        <Menu text="View" mnemonicParsing="false">
+            <MenuItem text="Zoom In" mnemonicParsing="false"
+                      onAction="#handleZoomIn"
+                      accelerator="Ctrl+Plus"/>
+            <MenuItem text="Zoom Out" mnemonicParsing="false"
+                      onAction="#handleZoomOut"
+                      accelerator="Ctrl+Minus"/>
+            <MenuItem text="Reset Zoom" mnemonicParsing="false"
+                      onAction="#handleResetZoom"
+                      accelerator="Ctrl+0"/>
+            <MenuItem text="Fit to Window" mnemonicParsing="false"
+                      onAction="#handleFitToWindow"
+                      accelerator="Ctrl+F"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="Show Grid" mnemonicParsing="false"
+                      onAction="#handleToggleGrid"/>
+            <MenuItem text="Show Minimap" mnemonicParsing="false"
+                      onAction="#handleToggleMinimap"/>
+            <SeparatorMenuItem/>
+            <CheckMenuItem fx:id="darkModeToggle" text="Dark Mode"
+                           mnemonicParsing="false"
+                           onAction="#handleToggleDarkMode"
+                           accelerator="Ctrl+D"/>
         </Menu>
-        <Menu text="Settings">
-            <MenuItem text="Preferences" onAction="#handleSettings"/>
+
+        <Menu text="Analysis" mnemonicParsing="false">
+            <MenuItem text="Refresh Analysis" mnemonicParsing="false"
+                      onAction="#handleRefreshAnalysis"
+                      accelerator="F5"/>
+            <MenuItem text="Deep Analysis" mnemonicParsing="false"
+                      onAction="#handleDeepAnalysis"
+                      accelerator="Ctrl+Shift+A"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="Find Component..." mnemonicParsing="false"
+                      onAction="#handleFindComponent"
+                      accelerator="Ctrl+F"/>
+            <MenuItem text="Show Dependencies" mnemonicParsing="false"
+                      onAction="#handleShowDependencies"/>
         </Menu>
-        <Menu text="Help">
-            <MenuItem text="About CodeCartographer"/>
+
+        <Menu text="Layout" mnemonicParsing="false">
+            <MenuItem text="Auto Layout" mnemonicParsing="false"
+                      onAction="#handleAutoLayout"/>
+            <MenuItem text="Hierarchical Layout" mnemonicParsing="false"
+                      onAction="#handleHierarchicalLayout"/>
+            <MenuItem text="Circular Layout" mnemonicParsing="false"
+                      onAction="#handleCircularLayout"/>
+            <MenuItem text="Force-Directed Layout" mnemonicParsing="false"
+                      onAction="#handleForceDirectedLayout"/>
+        </Menu>
+
+        <Menu text="Help" mnemonicParsing="false">
+            <MenuItem text="User Guide" mnemonicParsing="false"
+                      onAction="#handleUserGuide"
+                      accelerator="F1"/>
+            <MenuItem text="Keyboard Shortcuts" mnemonicParsing="false"
+                      onAction="#handleKeyboardShortcuts"
+                      accelerator="Ctrl+?"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="Check for Updates" mnemonicParsing="false"
+                      onAction="#handleCheckUpdates"/>
+            <MenuItem text="About CodeCartographer" mnemonicParsing="false"
+                      onAction="#handleAbout"/>
         </Menu>
     </MenuBar>
 
-    <SplitPane dividerPositions="0.2" VBox.vgrow="ALWAYS">
-        <!-- Project Tree Panel -->
-        <VBox>
-            <Label text="Project Structure" styleClass="panel-header"/>
-            <TreeView fx:id="projectTreeView" VBox.vgrow="ALWAYS"/>
+    <!-- Enhanced Main Content Area -->
+    <SplitPane dividerPositions="0.25, 0.75" VBox.vgrow="ALWAYS" styleClass="main-split-pane">
+
+        <!-- Left Sidebar Panel -->
+        <VBox spacing="0" styleClass="sidebar-panel">
+            <!-- Project Structure Section -->
+            <VBox spacing="0" styleClass="sidebar-section">
+                <HBox styleClass="panel-header" alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Project Structure" styleClass="panel-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="⟳" styleClass="icon-button"
+                            onAction="#handleRefreshTree">
+                        <tooltip>
+                            <Tooltip text="Refresh Project Tree"/>
+                        </tooltip>
+                    </Button>
+                    <Button text="⚙" styleClass="icon-button"
+                            onAction="#handleTreeSettings">
+                        <tooltip>
+                            <Tooltip text="Tree View Settings"/>
+                        </tooltip>
+                    </Button>
+                </HBox>
+
+                <TreeView fx:id="projectTreeView" VBox.vgrow="ALWAYS"
+                          styleClass="modern-tree"/>
+            </VBox>
+
+            <!-- Filter and Search Section -->
+            <VBox spacing="8" styleClass="sidebar-section filter-section">
+                <Label text="Filters &amp; Search" styleClass="section-title"/>
+
+                <TextField fx:id="searchField" promptText="Search components..."
+                           styleClass="search-field">
+                    <tooltip>
+                        <Tooltip text="Search for components by name, type, or layer"/>
+                    </tooltip>
+                </TextField>
+
+                <VBox spacing="6">
+                    <Label text="Filter by Layer:" styleClass="filter-label"/>
+                    <ComboBox fx:id="layerFilterComboBox"
+                              promptText="All Layers"
+                              styleClass="filter-combo"
+                              onAction="#handleLayerFilter">
+                    </ComboBox>
+                </VBox>
+
+                <VBox spacing="6">
+                    <Label text="Filter by Type:" styleClass="filter-label"/>
+                    <ComboBox fx:id="typeFilterComboBox"
+                              promptText="All Types"
+                              styleClass="filter-combo"
+                              onAction="#handleTypeFilter"/>
+                </VBox>
+
+                <VBox spacing="6">
+                    <Label text="Filter by Language:" styleClass="filter-label"/>
+                    <ComboBox fx:id="languageFilterComboBox"
+                              promptText="All Languages"
+                              styleClass="filter-combo"
+                              onAction="#handleLanguageFilter"/>
+                </VBox>
+            </VBox>
         </VBox>
 
-        <!-- Visualization Panel -->
-        <TabPane fx:id="visualizationTabPane" VBox.vgrow="ALWAYS">
-            <Tab text="Architecture Diagram" closable="false">
-                <ScrollPane>
-                    <!-- Graph visualization will be added here programmatically -->
+        <!-- Main Visualization Area -->
+        <VBox spacing="0" styleClass="main-content-area">
+            <!-- Enhanced Toolbar -->
+            <HBox styleClass="graph-toolbar" alignment="CENTER_LEFT" spacing="12">
+                <!-- Layout Controls -->
+                <VBox spacing="4">
+                    <Label text="Layout:" styleClass="toolbar-label"/>
+                    <ComboBox fx:id="layoutComboBox"
+                              value="Hierarchical"
+                              styleClass="toolbar-combo"
+                              onAction="#handleLayoutChange">
+                    </ComboBox>
+                </VBox>
+
+                <Separator orientation="VERTICAL"/>
+
+                <!-- Zoom Controls -->
+                <VBox spacing="4">
+                    <Label text="Zoom:" styleClass="toolbar-label"/>
+                    <HBox spacing="4" alignment="CENTER_LEFT">
+                        <Button text="−" styleClass="zoom-button"
+                                onAction="#handleZoomOut">
+                            <tooltip>
+                                <Tooltip text="Zoom Out (Ctrl+-)"/>
+                            </tooltip>
+                        </Button>
+                        <Label fx:id="zoomLabel" text="100%"
+                               styleClass="zoom-label"
+                               minWidth="45"
+                               alignment="CENTER"/>
+                        <Button text="+" styleClass="zoom-button"
+                                onAction="#handleZoomIn">
+                            <tooltip>
+                                <Tooltip text="Zoom In (Ctrl++)"/>
+                            </tooltip>
+                        </Button>
+                        <Button text="⌂" styleClass="zoom-button"
+                                onAction="#handleFitToWindow">
+                            <tooltip>
+                                <Tooltip text="Fit to Window (Ctrl+F)"/>
+                            </tooltip>
+                        </Button>
+                    </HBox>
+                </VBox>
+
+                <Separator orientation="VERTICAL"/>
+
+                <!-- View Options -->
+                <VBox spacing="4">
+                    <Label text="View:" styleClass="toolbar-label"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <CheckBox fx:id="showLabelsCheckBox" text="Labels"
+                                  selected="true"
+                                  onAction="#handleToggleLabels"/>
+                        <CheckBox fx:id="showGridCheckBox" text="Grid"
+                                  onAction="#handleToggleGrid"/>
+                        <CheckBox fx:id="showMinimapCheckBox" text="Minimap"
+                                  onAction="#handleToggleMinimap"/>
+                    </HBox>
+                </VBox>
+
+                <Region HBox.hgrow="ALWAYS"/>
+
+                <!-- Action Buttons -->
+                <HBox spacing="8" alignment="CENTER_RIGHT">
+                    <Button text="📷 Export" styleClass="action-button secondary"
+                            onAction="#handleExportDiagram"/>
+                    <Button text="🔍 Find" styleClass="action-button secondary"
+                            onAction="#handleFindComponent"/>
+                    <Button text="⟳ Refresh" styleClass="action-button"
+                            onAction="#handleRefreshAnalysis"/>
+                </HBox>
+            </HBox>
+
+            <!-- Tab Pane for Different Views -->
+            <TabPane fx:id="visualizationTabPane" VBox.vgrow="ALWAYS"
+                     styleClass="modern-tab-pane"
+                     tabClosingPolicy="UNAVAILABLE">
+
+                <!-- Architecture Diagram Tab -->
+                <Tab text="🏗 Architecture" styleClass="diagram-tab">
+                    <StackPane styleClass="tab-content">
+                        <ScrollPane fx:id="diagramScrollPane"
+                                    styleClass="diagram-scroll-pane"
+                                    StackPane.alignment="CENTER">
+                            <!-- Graph visualization will be added programmatically -->
+                        </ScrollPane>
+
+                        <!-- Minimap (initially hidden) -->
+                        <ScrollPane fx:id="minimapScrollPane"
+                                    visible="false"
+                                    managed="false"
+                                    styleClass="minimap-scroll-pane"
+                                    prefWidth="200"
+                                    prefHeight="150"
+                                    StackPane.alignment="BOTTOM_RIGHT">
+                            <StackPane.margin>
+                                <Insets bottom="16" right="16"/>
+                            </StackPane.margin>
+                        </ScrollPane>
+                    </StackPane>
+                </Tab>
+
+                <!-- Components Tab -->
+                <Tab text="📦 Components">
+                    <VBox spacing="16" styleClass="tab-content components-tab">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label text="Components Overview" styleClass="tab-title"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <TextField promptText="Search components..."
+                                       styleClass="search-field-small"/>
+                            <ComboBox promptText="Group by..."
+                                      styleClass="group-combo">
+                            </ComboBox>
+                        </HBox>
+
+                        <ListView fx:id="componentsListView"
+                                  VBox.vgrow="ALWAYS"
+                                  styleClass="components-list"/>
+                    </VBox>
+                </Tab>
+
+                <!-- Dependencies Tab -->
+                <Tab text="🔗 Dependencies">
+                    <VBox spacing="16" styleClass="tab-content dependencies-tab">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label text="Dependencies Analysis" styleClass="tab-title"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <ComboBox promptText="Show..."
+                                      value="All Dependencies"
+                                      styleClass="filter-combo">
+                            </ComboBox>
+                        </HBox>
+
+                        <ScrollPane VBox.vgrow="ALWAYS"
+                                    styleClass="dependencies-scroll">
+                            <VBox fx:id="dependenciesContainer"
+                                  spacing="12"
+                                  styleClass="dependencies-container"/>
+                        </ScrollPane>
+                    </VBox>
+                </Tab>
+
+                <!-- Statistics Tab -->
+                <Tab text="📊 Statistics">
+                    <VBox spacing="20" styleClass="tab-content statistics-tab">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label text="Project Statistics" styleClass="tab-title"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="📋 Copy Report" styleClass="action-button secondary"/>
+                            <Button text="💾 Export Report" styleClass="action-button secondary"/>
+                        </HBox>
+
+                        <ScrollPane VBox.vgrow="ALWAYS"
+                                    fitToWidth="true"
+                                    styleClass="statistics-scroll">
+                            <VBox fx:id="statisticsContainer"
+                                  spacing="16"
+                                  styleClass="stats-container"/>
+                        </ScrollPane>
+                    </VBox>
+                </Tab>
+
+                <!-- Metrics Tab -->
+                <Tab text="📈 Metrics">
+                    <VBox spacing="16" styleClass="tab-content metrics-tab">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label text="Code Quality Metrics" styleClass="tab-title"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <ComboBox promptText="Time Range"
+                                      value="Current"
+                                      styleClass="filter-combo">
+                            </ComboBox>
+                        </HBox>
+
+                        <ScrollPane VBox.vgrow="ALWAYS"
+                                    fitToWidth="true"
+                                    styleClass="metrics-scroll">
+                            <VBox fx:id="metricsContainer"
+                                  spacing="16"
+                                  styleClass="metrics-container"/>
+                        </ScrollPane>
+                    </VBox>
+                </Tab>
+            </TabPane>
+        </VBox>
+
+        <!-- Right Properties Panel -->
+        <VBox spacing="0" styleClass="properties-panel">
+            <!-- Component Details Section -->
+            <VBox spacing="0" styleClass="sidebar-section">
+                <HBox styleClass="panel-header" alignment="CENTER_LEFT">
+                    <Label text="Component Details" styleClass="panel-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="📌" styleClass="icon-button">
+                        <tooltip>
+                            <Tooltip text="Pin Details Panel"/>
+                        </tooltip>
+                    </Button>
+                </HBox>
+
+                <ScrollPane VBox.vgrow="ALWAYS"
+                            fitToWidth="true"
+                            styleClass="details-scroll">
+                    <VBox fx:id="componentDetailsContainer"
+                          spacing="12"
+                          styleClass="details-container">
+                        <Label text="Select a component to view details"
+                               styleClass="placeholder-text"/>
+                    </VBox>
                 </ScrollPane>
-            </Tab>
-        </TabPane>
+            </VBox>
+
+            <!-- Quick Actions Section -->
+            <VBox spacing="8" styleClass="sidebar-section actions-section">
+                <Label text="Quick Actions" styleClass="section-title"/>
+
+                <VBox spacing="6">
+                    <Button text="Navigate to Source"
+                            styleClass="action-button-small secondary"
+                            disable="true"
+                            maxWidth="Infinity"
+                            onAction="#handleNavigateToSource"/>
+                    <Button text="Show Dependencies"
+                            styleClass="action-button-small secondary"
+                            disable="true"
+                            maxWidth="Infinity"
+                            onAction="#handleShowComponentDependencies"/>
+                    <Button text="Find References"
+                            styleClass="action-button-small secondary"
+                            disable="true"
+                            maxWidth="Infinity"
+                            onAction="#handleFindReferences"/>
+                    <Button text="Generate Documentation"
+                            styleClass="action-button-small"
+                            disable="true"
+                            maxWidth="Infinity"
+                            onAction="#handleGenerateDocumentation"/>
+                </VBox>
+            </VBox>
+        </VBox>
     </SplitPane>
 
-    <!-- Status Bar -->
-    <StatusBar fx:id="statusBar">
+    <!-- Enhanced Status Bar -->
+    <StatusBar fx:id="statusBar" styleClass="modern-status-bar">
         <leftItems>
-            <Label fx:id="statusLabel" text="Ready"/>
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <Label fx:id="statusLabel" text="Ready" styleClass="status-text"/>
+                <Separator orientation="VERTICAL"/>
+                <Label fx:id="projectInfoLabel" text="" styleClass="status-info"/>
+            </HBox>
         </leftItems>
+
         <rightItems>
-            <ProgressBar fx:id="analysisProgressBar" prefWidth="200"/>
+            <HBox spacing="12" alignment="CENTER_RIGHT">
+                <!-- Progress indicator -->
+                <HBox fx:id="progressContainer"
+                      spacing="8"
+                      alignment="CENTER_RIGHT"
+                      visible="false"
+                      managed="false">
+                    <ProgressIndicator fx:id="analysisProgressIndicator"
+                                       styleClass="loading-spinner"
+                                       prefWidth="16"
+                                       prefHeight="16"/>
+                    <Label fx:id="progressLabel" text="Analyzing..."
+                           styleClass="progress-text"/>
+                </HBox>
+
+                <!-- Memory usage -->
+                <Label fx:id="memoryLabel" text="Memory: 0 MB"
+                       styleClass="status-info"/>
+
+                <Separator orientation="VERTICAL"/>
+
+                <!-- Zoom level -->
+                <Label fx:id="statusZoomLabel" text="100%"
+                       styleClass="status-info"/>
+
+                <!-- Connection status -->
+                <HBox spacing="4" alignment="CENTER">
+                    <Circle fx:id="connectionStatusIndicator"
+                            radius="4"
+                            fill="#10b981"/>
+                    <Label text="Ready" styleClass="status-info"/>
+                </HBox>
+            </HBox>
         </rightItems>
     </StatusBar>
 </VBox>

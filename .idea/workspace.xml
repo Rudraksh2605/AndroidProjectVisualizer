@@ -6,14 +6,16 @@
   <component name="ChangeListManager">
     <list default="true" id="96e75262-d0be-4199-aeba-7ace1778131c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/build.gradle.kts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/CodeComponent.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/CodeComponent.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/DartParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/DartParser.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaScriptParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaScriptParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/XmlParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/XmlParser.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/ProjectAnalyzer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/ProjectAnalyzer.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/RelationshipBuilder.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/RelationshipBuilder.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphVisualizer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphVisualizer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/fxml/main.fxml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/fxml/main.fxml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/styles/styles.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/styles/styles.css" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -24,6 +26,23 @@
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
     </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <projects_view>
+          <tree_state>
+            <expand>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="AndroidProjectVisualizer" type="f1a62948:ProjectNode" />
+              </path>
+            </expand>
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
@@ -52,6 +71,7 @@
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;Gradle.AndroidProjectVisualizer [:Main.main()].executor&quot;: &quot;Run&quot;,
+    &quot;Gradle.Build AndroidProjectVisualizer.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;master&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
@@ -127,7 +147,16 @@
       <workItem from="1756399772464" duration="2464000" />
       <workItem from="1756438433090" duration="2752000" />
       <workItem from="1756467208362" duration="109000" />
-      <workItem from="1756472975740" duration="4221000" />
+      <workItem from="1756472975740" duration="6859000" />
+      <workItem from="1756570870080" duration="656000" />
+      <workItem from="1756642100759" duration="5000" />
+      <workItem from="1756794053090" duration="334000" />
+      <workItem from="1757081363491" duration="807000" />
+      <workItem from="1757258930737" duration="318000" />
+      <workItem from="1757347564882" duration="599000" />
+      <workItem from="1757410705871" duration="6353000" />
+      <workItem from="1757418234346" duration="1353000" />
+      <workItem from="1757423211532" duration="7678000" />
     </task>
     <servers />
   </component>

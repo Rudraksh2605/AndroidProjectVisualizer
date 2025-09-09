@@ -10,13 +10,15 @@ public class CodeComponent {
     private String filePath;
     private String language;
     private String extendsClass;
+    private String layer; // NEW: UI, Business Logic, Data, etc.
     private List<String> implementsList = new ArrayList<>();
     private List<CodeComponent> dependencies = new ArrayList<>();
     private List<CodeMethod> methods = new ArrayList<>();
     private List<CodeField> fields = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
     private List<String> injectedDependencies = new ArrayList<>();
-
+    private List<String> layoutFiles = new ArrayList<>(); // NEW: Associated layout files
+    private List<NavigationDestination> navigationDestinations = new ArrayList<>(); // NEW: Navigation info
 
     // Getters and setters
     public String getId() { return id; }
@@ -37,6 +39,9 @@ public class CodeComponent {
     public String getExtendsClass() { return extendsClass; }
     public void setExtendsClass(String extendsClass) { this.extendsClass = extendsClass; }
 
+    public String getLayer() { return layer; }
+    public void setLayer(String layer) { this.layer = layer; }
+
     public List<String> getImplementsList() { return implementsList; }
     public void setImplementsList(List<String> implementsList) { this.implementsList = implementsList; }
 
@@ -54,4 +59,12 @@ public class CodeComponent {
 
     public List<String> getInjectedDependencies() { return injectedDependencies; }
     public void setInjectedDependencies(List<String> injectedDependencies) { this.injectedDependencies = injectedDependencies; }
+
+    public List<String> getLayoutFiles() { return layoutFiles; }
+    public void setLayoutFiles(List<String> layoutFiles) { this.layoutFiles = layoutFiles; }
+    public void addLayoutFile(String layoutFile) { this.layoutFiles.add(layoutFile); }
+
+    public List<NavigationDestination> getNavigationDestinations() { return navigationDestinations; }
+    public void setNavigationDestinations(List<NavigationDestination> navigationDestinations) { this.navigationDestinations = navigationDestinations; }
+    public void addNavigationDestination(NavigationDestination destination) { this.navigationDestinations.add(destination); }
 }

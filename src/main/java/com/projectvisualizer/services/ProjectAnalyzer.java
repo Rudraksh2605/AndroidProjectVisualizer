@@ -5,18 +5,21 @@ import com.projectvisualizer.parsers.*;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.ArrayList;
 
 public class ProjectAnalyzer {
-    private final JavaFileParser javaParser;
+    private  JavaFileParser javaParser;
     private final KotlinParser kotlinParser;
     private final XmlParser xmlParser;
     private final DartParser dartParser;
     private final JavaScriptParser jsParser;
     private final RelationshipBuilder relationshipBuilder;
+    private final AndroidManifestParser androidManifestParser;
+    private Map<String, String> activityLayoutMap;
 
     public ProjectAnalyzer() {
         this.javaParser = new JavaFileParser();
@@ -25,12 +28,24 @@ public class ProjectAnalyzer {
         this.dartParser = new DartParser();
         this.jsParser = new JavaScriptParser();
         this.relationshipBuilder = new RelationshipBuilder();
+        this.androidManifestParser = new AndroidManifestParser();
     }
 
     public ProjectAnalysisResult analyze(File projectDir, AnalysisProgressListener progressListener) {
         ProjectAnalysisResult result = new ProjectAnalysisResult();
         result.setProjectName(projectDir.getName());
         result.setProjectPath(projectDir.getAbsolutePath());
+
+        File manifestFile = new File(projectDir, "src/main/AndroidManifest.xml");
+        if (manifestFile.exists()) {
+            try {
+                activityLayoutMap = androidManifestParser.parseManifest(manifestFile);
+                // Update Java parser with activity information
+                javaParser = new JavaFileParser(activityLayoutMap);
+            } catch (Exception e) {
+                System.err.println("Error parsing AndroidManifest.xml: " + e.getMessage());
+            }
+        }
 
         // Count total files for progress tracking
         int totalFiles = countFiles(projectDir);
@@ -42,7 +57,26 @@ public class ProjectAnalyzer {
         // Build relationships between components
         relationshipBuilder.buildRelationships(result);
 
+        addNavigationRelationships(result);
+
+
         return result;
+    }
+
+    private void addNavigationRelationships(ProjectAnalysisResult result) {
+        for (CodeComponent component : result.getComponents()) {
+            if (component.getNavigationDestinations() != null &&
+                    !component.getNavigationDestinations().isEmpty()) {
+
+                for (NavigationDestination destination : component.getNavigationDestinations()) {
+                    ComponentRelationship navRel = new ComponentRelationship();
+                    navRel.setSourceId(component.getId());
+                    navRel.setTargetId(destination.getDestinationId());
+                    navRel.setType("NAVIGATES_TO");
+                    result.addRelationship(navRel);
+                }
+            }
+        }
     }
 
     private int countFiles(File directory) {

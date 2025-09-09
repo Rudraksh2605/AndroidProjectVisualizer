@@ -29,6 +29,9 @@ dependencies {
 
     implementation("org.yaml:snakeyaml:1.30")
 
+    implementation("org.openjfx:javafx-swing:17.0.2")
+
+
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -36,7 +39,7 @@ dependencies {
 
 javafx {
     version = "17.0.2"
-    modules = listOf("javafx.controls", "javafx.fxml", "javafx.graphics")
+    modules = listOf("javafx.controls", "javafx.fxml", "javafx.graphics", "javafx.swing")
 }
 
 application {

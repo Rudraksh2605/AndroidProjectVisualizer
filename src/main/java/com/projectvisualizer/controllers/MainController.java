@@ -4,6 +4,7 @@ import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.ComponentRelationship;
 import com.projectvisualizer.models.ProjectAnalysisResult;
 import com.projectvisualizer.services.ProjectAnalyzer;
+import javafx.embed.swing.SwingFXUtils;  // Added missing import
 import com.projectvisualizer.visualization.GraphVisualizer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -11,12 +12,19 @@ import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.DirectoryChooser;
 import org.controlsfx.control.StatusBar;
+import javafx.scene.image.WritableImage;
+import javafx.stage.FileChooser;
 
+
+import javax.imageio.ImageIO;
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,13 +32,37 @@ public class MainController {
 
     @FXML private TreeView<String> projectTreeView;
     @FXML private TabPane visualizationTabPane;
-    @FXML private ProgressBar analysisProgressBar;
     @FXML private Label statusLabel;
     @FXML private StatusBar statusBar;
     @FXML private VBox mainContainer;
+    @FXML private Label zoomLabel;
+    @FXML private Label statusZoomLabel;
+    @FXML private Label memoryLabel;
+    @FXML private Label projectInfoLabel;
+    @FXML private Label progressLabel;
+    @FXML private HBox progressContainer;
+    @FXML private ProgressIndicator analysisProgressIndicator;
+    @FXML private Circle connectionStatusIndicator;
+    @FXML private TextField searchField;
+    @FXML private ComboBox<String> layerFilterComboBox;
+    @FXML private ComboBox<String> typeFilterComboBox;
+    @FXML private ComboBox<String> languageFilterComboBox;
+    @FXML private ComboBox<String> layoutComboBox;
+    @FXML private CheckBox showLabelsCheckBox;
+    @FXML private CheckBox showGridCheckBox;
+    @FXML private CheckBox showMinimapCheckBox;
+    @FXML private ListView<String> componentsListView;
+    @FXML private VBox dependenciesContainer;
+    @FXML private VBox statisticsContainer;
+    @FXML private VBox metricsContainer;
+    @FXML private VBox componentDetailsContainer;
+    @FXML private ScrollPane diagramScrollPane;
+    @FXML private ScrollPane minimapScrollPane;
 
+    private ProjectAnalysisResult currentAnalysisResult;
     private ProjectAnalyzer projectAnalyzer;
     private GraphVisualizer graphVisualizer;
+    private double currentZoomLevel = 1.0;
 
     @FXML
     public void initialize() {
@@ -38,13 +70,47 @@ public class MainController {
         graphVisualizer = new GraphVisualizer();
         setupProjectTree();
         setupStatusBar();
+        setupComboBoxes();
+        setupCheckBoxes();
+
+        // Set up memory monitoring
+        setupMemoryMonitoring();
+    }
+
+    private void setupComboBoxes() {
+        // Setup layer filter
+        layerFilterComboBox.getItems().addAll("All Layers", "UI", "Business Logic", "Data", "Other");
+        layerFilterComboBox.setValue("All Layers");
+
+        // Setup layout combo
+        layoutComboBox.getItems().addAll("Hierarchical", "Force-Directed", "Circular", "Grid", "Layered");
+        layoutComboBox.setValue("Hierarchical");
+    }
+
+    private void setupCheckBoxes() {
+        // Set up check box listeners
+        showLabelsCheckBox.setSelected(true);
+        showGridCheckBox.setSelected(false);
+        showMinimapCheckBox.setSelected(false);
+    }
+
+    private void setupMemoryMonitoring() {
+        // Update memory usage periodically
+        javafx.animation.AnimationTimer memoryTimer = new javafx.animation.AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                long usedMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+                memoryLabel.setText(String.format("Memory: %d MB", usedMemory / (1024 * 1024)));
+            }
+        };
+        memoryTimer.start();
     }
 
     @FXML
     private void handleOpenProject() {
         DirectoryChooser directoryChooser = new DirectoryChooser();
         directoryChooser.setTitle("Select Project Directory");
-        File selectedDirectory = directoryChooser.showDialog(projectTreeView.getScene().getWindow());
+        File selectedDirectory = directoryChooser.showDialog(mainContainer.getScene().getWindow());
 
         if (selectedDirectory != null) {
             analyzeProject(selectedDirectory);
@@ -53,13 +119,144 @@ public class MainController {
 
     @FXML
     private void handleExportDiagram() {
-        // Implementation for exporting diagrams
-        showInfoDialog("Export", "Export functionality", "Export feature will be implemented in future versions.");
+        try {
+            // Create a snapshot of the diagram
+            WritableImage image = diagramScrollPane.snapshot(null, null);
+
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Export Diagram");
+            fileChooser.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("PNG", "*.png"),
+                    new FileChooser.ExtensionFilter("JPEG", "*.jpg", "*.jpeg")
+            );
+
+            File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+            if (file != null) {
+                String extension = file.getName().substring(file.getName().lastIndexOf(".") + 1);
+                ImageIO.write(SwingFXUtils.fromFXImage(image, null), extension, file);
+                showInfoDialog("Export Successful", "Diagram exported successfully",
+                        "The diagram has been exported to: " + file.getAbsolutePath());
+            }
+        } catch (IOException e) {
+            showErrorDialog("Export Error", "Failed to export diagram", e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleExportReport() {
+        showInfoDialog("Export Report", "Report functionality", "Report export feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleRefreshAnalysis() {
+        if (currentAnalysisResult != null) {
+            analyzeProject(new File(currentAnalysisResult.getProjectPath()));
+        } else {
+            showInfoDialog("Refresh", "No project loaded", "Please open a project first.");
+        }
+    }
+
+    @FXML
+    private void handleZoomIn() {
+        currentZoomLevel *= 1.2;
+        updateZoom();
+    }
+
+    @FXML
+    private void handleZoomOut() {
+        currentZoomLevel *= 0.8;
+        updateZoom();
+    }
+
+    @FXML
+    private void handleResetZoom() {
+        currentZoomLevel = 1.0;
+        updateZoom();
+    }
+
+    @FXML
+    private void handleFitToWindow() {
+        showInfoDialog("Fit to Window", "Fit to window functionality", "Fit to window feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleToggleGrid() {
+        boolean showGrid = showGridCheckBox.isSelected();
+        // Implementation to show/hide grid
+    }
+
+    @FXML
+    private void handleToggleMinimap() {
+        boolean showMinimap = showMinimapCheckBox.isSelected();
+        minimapScrollPane.setVisible(showMinimap);
+        minimapScrollPane.setManaged(showMinimap);
+    }
+
+    @FXML
+    private void handleToggleLabels() {
+        boolean showLabels = showLabelsCheckBox.isSelected();
+        // Implementation to show/hide labels
+    }
+
+    @FXML
+    private void handleToggleDarkMode() {
+        showInfoDialog("Dark Mode", "Dark mode functionality", "Dark mode feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleLayoutChange() {
+        String selectedLayout = layoutComboBox.getValue();
+        // Implementation to change layout
+    }
+
+    @FXML
+    private void handleLayerFilter() {
+        String selectedLayer = layerFilterComboBox.getValue();
+        filterByLayer(selectedLayer);
+    }
+
+    @FXML
+    private void handleTypeFilter() {
+        showInfoDialog("Type Filter", "Type filter functionality", "Type filter feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleLanguageFilter() {
+        showInfoDialog("Language Filter", "Language filter functionality", "Language filter feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleRefreshTree() {
+        showInfoDialog("Refresh Tree", "Refresh tree functionality", "Refresh tree feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleTreeSettings() {
+        showInfoDialog("Tree Settings", "Tree settings functionality", "Tree settings feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleNavigateToSource() {
+        showInfoDialog("Navigate to Source", "Navigate to source functionality", "Navigate to source feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleShowComponentDependencies() {
+        showInfoDialog("Show Dependencies", "Show dependencies functionality", "Show dependencies feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleFindReferences() {
+        showInfoDialog("Find References", "Find references functionality", "Find references feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleGenerateDocumentation() {
+        showInfoDialog("Generate Documentation", "Generate documentation functionality", "Generate documentation feature will be implemented in future versions.");
     }
 
     @FXML
     private void handleSettings() {
-        // Implementation for settings dialog
         showInfoDialog("Settings", "Settings functionality", "Settings feature will be implemented in future versions.");
     }
 
@@ -68,31 +265,101 @@ public class MainController {
         Platform.exit();
     }
 
+    @FXML
+    private void handleDeepAnalysis() {
+        showInfoDialog("Deep Analysis", "Deep analysis functionality", "Deep analysis feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleFindComponent() {
+        showInfoDialog("Find Component", "Find component functionality", "Find component feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleShowDependencies() {
+        showInfoDialog("Show Dependencies", "Show dependencies functionality", "Show dependencies feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleAutoLayout() {
+        showInfoDialog("Auto Layout", "Auto layout functionality", "Auto layout feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleHierarchicalLayout() {
+        showInfoDialog("Hierarchical Layout", "Hierarchical layout functionality", "Hierarchical layout feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleCircularLayout() {
+        showInfoDialog("Circular Layout", "Circular layout functionality", "Circular layout feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleForceDirectedLayout() {
+        showInfoDialog("Force-Directed Layout", "Force-directed layout functionality", "Force-directed layout feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleUserGuide() {
+        showInfoDialog("User Guide", "User guide functionality", "User guide feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleKeyboardShortcuts() {
+        showInfoDialog("Keyboard Shortcuts", "Keyboard shortcuts functionality", "Keyboard shortcuts feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleCheckUpdates() {
+        showInfoDialog("Check for Updates", "Check for updates functionality", "Check for updates feature will be implemented in future versions.");
+    }
+
+    @FXML
+    private void handleAbout() {
+        showInfoDialog("About CodeCartographer", "About functionality", "CodeCartographer v1.0 - Project Architecture Visualizer");
+    }
+
+    private void updateZoom() {
+        zoomLabel.setText(String.format("%d%%", (int)(currentZoomLevel * 100)));
+        statusZoomLabel.setText(String.format("%d%%", (int)(currentZoomLevel * 100)));
+        // Implementation to actually zoom the diagram
+    }
+
     private void analyzeProject(File projectDir) {
         statusLabel.setText("Analyzing project...");
-        analysisProgressBar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+        progressContainer.setVisible(true);
+        progressContainer.setManaged(true);
+        analysisProgressIndicator.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        progressLabel.setText("Analyzing...");
 
         new Thread(() -> {
             try {
                 ProjectAnalysisResult result = projectAnalyzer.analyze(projectDir,
                         (progress, message) -> Platform.runLater(() -> {
-                            analysisProgressBar.setProgress(progress);
-                            statusBar.setText(message);
+                            analysisProgressIndicator.setProgress(progress);
+                            progressLabel.setText(message);
                         }));
 
                 Platform.runLater(() -> {
+                    currentAnalysisResult = result;
                     updateProjectTree(result);
-                    createVisualizationTabs(result);
+                    updateVisualizationTabs(result);
                     statusLabel.setText("Analysis complete");
-                    analysisProgressBar.setProgress(1.0);
-                    statusBar.setText("Ready");
+                    analysisProgressIndicator.setProgress(1.0);
+                    progressContainer.setVisible(false);
+                    progressContainer.setManaged(false);
+                    projectInfoLabel.setText(result.getProjectName() + " - " + result.getComponents().size() + " components");
+                    connectionStatusIndicator.setFill(Color.GREEN);
                 });
 
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     statusLabel.setText("Analysis failed: " + e.getMessage());
-                    analysisProgressBar.setProgress(0);
-                    statusBar.setText("Analysis failed");
+                    analysisProgressIndicator.setProgress(0);
+                    progressContainer.setVisible(false);
+                    progressContainer.setManaged(false);
+                    connectionStatusIndicator.setFill(Color.RED);
                     showErrorDialog("Analysis Error", "Failed to analyze project", e.getMessage());
                 });
             }
@@ -107,7 +374,11 @@ public class MainController {
     }
 
     private void setupStatusBar() {
-        statusBar.setText("Ready");
+        statusLabel.setText("Ready");
+        projectInfoLabel.setText("");
+        memoryLabel.setText("Memory: 0 MB");
+        statusZoomLabel.setText("100%");
+        connectionStatusIndicator.setFill(Color.GREEN);
     }
 
     private void updateProjectTree(ProjectAnalysisResult result) {
@@ -126,98 +397,28 @@ public class MainController {
         projectNode.setExpanded(true);
     }
 
-    private void createVisualizationTabs(ProjectAnalysisResult result) {
-        visualizationTabPane.getTabs().clear();
-
-        // Architecture Diagram Tab
-        Tab diagramTab = new Tab("Architecture Diagram");
-        diagramTab.setContent(graphVisualizer.createGraphView(result));
-        diagramTab.setClosable(false);
-
-        // Components Tab
-        Tab componentsTab = new Tab("Components");
-        componentsTab.setContent(createComponentsView(result));
-        componentsTab.setClosable(false);
-
-        // Dependencies Tab
-        Tab dependenciesTab = new Tab("Dependencies");
-        dependenciesTab.setContent(createDependenciesView(result));
-        dependenciesTab.setClosable(false);
-
-        // Statistics Tab
-        Tab statisticsTab = new Tab("Statistics");
-        statisticsTab.setContent(createStatisticsView(result));
-        statisticsTab.setClosable(false);
-
-        visualizationTabPane.getTabs().addAll(diagramTab, componentsTab, dependenciesTab, statisticsTab);
-    }
-
-    private ScrollPane createStatisticsView(ProjectAnalysisResult result) {
-        VBox statsBox = new VBox(15);
-        statsBox.setPadding(new Insets(15));
-
-        Label titleLabel = new Label("Project Statistics");
-        titleLabel.setStyle("-fx-font-size: 16; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
-
-        GridPane statsGrid = new GridPane();
-        statsGrid.setHgap(10);
-        statsGrid.setVgap(8);
-        statsGrid.setPadding(new Insets(10));
-
-        // Add statistics
-        addStatistic(statsGrid, 0, "Total Components", String.valueOf(result.getComponents().size()));
-        addStatistic(statsGrid, 1, "Total Relationships", String.valueOf(result.getRelationships().size()));
-
-        // Count by type
-        Map<String, Integer> typeCounts = new HashMap<>();
-        for (CodeComponent comp : result.getComponents()) {
-            typeCounts.put(comp.getType(), typeCounts.getOrDefault(comp.getType(), 0) + 1);
-        }
-
-        int row = 2;
-        for (Map.Entry<String, Integer> entry : typeCounts.entrySet()) {
-            addStatistic(statsGrid, row++, entry.getKey() + " Components", String.valueOf(entry.getValue()));
-        }
-
-        // Count by language
-        Map<String, Integer> languageCounts = new HashMap<>();
-        for (CodeComponent comp : result.getComponents()) {
-            languageCounts.put(comp.getLanguage(), languageCounts.getOrDefault(comp.getLanguage(), 0) + 1);
-        }
-
-        for (Map.Entry<String, Integer> entry : languageCounts.entrySet()) {
-            addStatistic(statsGrid, row++, entry.getKey() + " Files", String.valueOf(entry.getValue()));
-        }
-
-        statsBox.getChildren().addAll(titleLabel, statsGrid);
-
-        ScrollPane scrollPane = new ScrollPane(statsBox);
-        scrollPane.setFitToWidth(true);
-
-        return scrollPane;
-    }
-
-    private void addStatistic(GridPane grid, int row, String label, String value) {
-        Label statLabel = new Label(label + ":");
-        statLabel.setStyle("-fx-font-weight: bold;");
-
-        Label statValue = new Label(value);
-
-        grid.add(statLabel, 0, row);
-        grid.add(statValue, 1, row);
-    }
-
-    private ScrollPane createComponentsView(ProjectAnalysisResult result) {
-        ListView<String> componentsList = new ListView<>();
+    private void updateVisualizationTabs(ProjectAnalysisResult result) {
+        // Update components list
+        componentsListView.getItems().clear();
         result.getComponents().forEach(component ->
-                componentsList.getItems().add(component.getName() + " - " + component.getType()));
+                componentsListView.getItems().add(component.getName() + " - " + component.getType()));
 
-        return new ScrollPane(componentsList);
+        // Update dependencies view
+        updateDependenciesView(result);
+
+        // Update statistics view
+        updateStatisticsView(result);
+
+        // Update metrics view
+        updateMetricsView(result);
+
+        // Update diagram
+        ScrollPane diagram = graphVisualizer.createGraphView(result);
+        diagramScrollPane.setContent(diagram);
     }
 
-    private ScrollPane createDependenciesView(ProjectAnalysisResult result) {
-        VBox dependenciesBox = new VBox(10);
-        dependenciesBox.setPadding(new Insets(10));
+    private void updateDependenciesView(ProjectAnalysisResult result) {
+        dependenciesContainer.getChildren().clear();
 
         // Gradle Dependencies
         if (!result.getGradleDependencies().isEmpty()) {
@@ -234,79 +435,57 @@ public class MainController {
                 gradleBox.getChildren().add(depRow);
             });
 
-            dependenciesBox.getChildren().addAll(gradleLabel, gradleBox);
+            dependenciesContainer.getChildren().addAll(gradleLabel, gradleBox);
         }
 
-        // Flutter Dependencies
-        if (!result.getFlutterDependencies().isEmpty()) {
-            Label flutterLabel = new Label("Flutter Dependencies:");
-            flutterLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14;");
-
-            VBox flutterBox = new VBox(5);
-            result.getFlutterDependencies().forEach(dep -> {
-                HBox depRow = new HBox(10);
-                Label nameLabel = new Label(dep.getName());
-                Label versionLabel = new Label(dep.getVersion());
-                versionLabel.setTextFill(Color.GRAY);
-                depRow.getChildren().addAll(nameLabel, versionLabel);
-                flutterBox.getChildren().add(depRow);
-            });
-
-            dependenciesBox.getChildren().addAll(flutterLabel, flutterBox);
-        }
-
-        // JavaScript Dependencies
-        if (!result.getJsDependencies().isEmpty()) {
-            Label jsLabel = new Label("JavaScript Dependencies:");
-            jsLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14;");
-
-            VBox jsBox = new VBox(5);
-            result.getJsDependencies().forEach(dep -> {
-                HBox depRow = new HBox(10);
-                Label nameLabel = new Label(dep.getName());
-                Label versionLabel = new Label(dep.getVersion());
-                versionLabel.setTextFill(Color.GRAY);
-                depRow.getChildren().addAll(nameLabel, versionLabel);
-                jsBox.getChildren().add(depRow);
-            });
-
-            dependenciesBox.getChildren().addAll(jsLabel, jsBox);
-        }
-
-        // Component Dependencies
-        Label compLabel = new Label("Component Relationships:");
-        compLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14;");
-        dependenciesBox.getChildren().add(compLabel);
-
-        VBox relBox = new VBox(5);
-        for (ComponentRelationship rel : result.getRelationships()) {
-            HBox relRow = new HBox(10);
-            Label sourceLabel = new Label(findComponentName(result, rel.getSourceId()));
-            Label arrowLabel = new Label("→");
-            arrowLabel.setTextFill(Color.GRAY);
-            Label targetLabel = new Label(findComponentName(result, rel.getTargetId()));
-            Label typeLabel = new Label("(" + rel.getType() + ")");
-            typeLabel.setTextFill(Color.DARKGRAY);
-
-            relRow.getChildren().addAll(sourceLabel, arrowLabel, targetLabel, typeLabel);
-            relBox.getChildren().add(relRow);
-        }
-
-        dependenciesBox.getChildren().add(relBox);
-
-        ScrollPane scrollPane = new ScrollPane(dependenciesBox);
-        scrollPane.setFitToWidth(true);
-
-        return scrollPane;
+        // Add other dependency types similarly...
     }
 
-    private String findComponentName(ProjectAnalysisResult result, String id) {
-        for (CodeComponent comp : result.getComponents()) {
-            if (comp.getId().equals(id)) {
-                return comp.getName();
-            }
+    private void updateStatisticsView(ProjectAnalysisResult result) {
+        statisticsContainer.getChildren().clear();
+
+        Label titleLabel = new Label("Project Statistics");
+        titleLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
+
+        GridPane statsGrid = new GridPane();
+        statsGrid.setHgap(20);
+        statsGrid.setVgap(15);
+        statsGrid.setPadding(new Insets(15));
+        statsGrid.setStyle("-fx-background-color: white; -fx-background-radius: 8;");
+
+        // Add statistics
+        addStatistic(statsGrid, 0, "Total Components", String.valueOf(result.getComponents().size()), "#3b82f6");
+        addStatistic(statsGrid, 1, "Total Relationships", String.valueOf(result.getRelationships().size()), "#10b981");
+
+        statisticsContainer.getChildren().addAll(titleLabel, statsGrid);
+    }
+
+    private void updateMetricsView(ProjectAnalysisResult result) {
+        metricsContainer.getChildren().clear();
+
+        Label titleLabel = new Label("Code Quality Metrics");
+        titleLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
+
+        metricsContainer.getChildren().add(titleLabel);
+        // Add metrics implementation here
+    }
+
+    private void addStatistic(GridPane grid, int row, String label, String value, String color) {
+        Label statLabel = new Label(label + ":");
+        statLabel.setStyle("-fx-font-weight: 600; -fx-text-fill: #4b5563;");
+
+        Label statValue = new Label(value);
+        statValue.setStyle("-fx-font-weight: bold; -fx-font-size: 14; -fx-text-fill: " + color + ";");
+
+        grid.add(statLabel, 0, row);
+        grid.add(statValue, 1, row);
+    }
+
+    private void filterByLayer(String layer) {
+        // Implementation to filter components by layer
+        if (currentAnalysisResult != null) {
+            // Filter logic here
         }
-        return id; // Return the ID if component not found
     }
 
     private void showErrorDialog(String title, String header, String content) {
@@ -324,5 +503,4 @@ public class MainController {
         alert.setContentText(content);
         alert.showAndWait();
     }
-
 }
