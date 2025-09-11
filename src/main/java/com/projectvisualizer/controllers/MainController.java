@@ -4,7 +4,7 @@ import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.ComponentRelationship;
 import com.projectvisualizer.models.ProjectAnalysisResult;
 import com.projectvisualizer.services.ProjectAnalyzer;
-import javafx.embed.swing.SwingFXUtils;  // Added missing import
+import javafx.embed.swing.SwingFXUtils;
 import com.projectvisualizer.visualization.GraphVisualizer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -20,7 +20,6 @@ import javafx.stage.DirectoryChooser;
 import org.controlsfx.control.StatusBar;
 import javafx.scene.image.WritableImage;
 import javafx.stage.FileChooser;
-
 
 import javax.imageio.ImageIO;
 import java.io.File;
