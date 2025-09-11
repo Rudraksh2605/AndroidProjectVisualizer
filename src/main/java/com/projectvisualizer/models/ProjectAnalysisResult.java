@@ -39,4 +39,13 @@ public class ProjectAnalysisResult {
     public List<Dependency> getJsDependencies() { return jsDependencies; }
     public void setJsDependencies(List<Dependency> jsDependencies) { this.jsDependencies = jsDependencies; }
     public void addJSDependencies(List<Dependency> dependencies) { this.jsDependencies.addAll(dependencies); }
+
+    public CodeComponent findComponentById(String id) {
+        for (CodeComponent comp : components) {
+            if (comp.getId().equals(id)) {
+                return comp;
+            }
+        }
+        return null;
+    }
 }

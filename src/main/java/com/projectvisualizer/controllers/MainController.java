@@ -63,6 +63,10 @@ public class MainController {
     private GraphVisualizer graphVisualizer;
     private double currentZoomLevel = 1.0;
 
+    private GraphVisualizer.LayoutType currentLayoutType = GraphVisualizer.LayoutType.HIERARCHICAL;
+    private boolean showLabels = true;
+    private boolean showGrid = false;
+
     @FXML
     public void initialize() {
         projectAnalyzer = new ProjectAnalyzer();
@@ -84,13 +88,60 @@ public class MainController {
         // Setup layout combo
         layoutComboBox.getItems().addAll("Hierarchical", "Force-Directed", "Circular", "Grid", "Layered");
         layoutComboBox.setValue("Hierarchical");
+
+        // Add listener for layout changes
+        layoutComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            switch (newVal) {
+                case "Hierarchical":
+                    currentLayoutType = GraphVisualizer.LayoutType.HIERARCHICAL;
+                    break;
+                case "Force-Directed":
+                    currentLayoutType = GraphVisualizer.LayoutType.FORCE_DIRECTED;
+                    break;
+                case "Circular":
+                    currentLayoutType = GraphVisualizer.LayoutType.CIRCULAR;
+                    break;
+                case "Grid":
+                    currentLayoutType = GraphVisualizer.LayoutType.GRID;
+                    break;
+                case "Layered":
+                    currentLayoutType = GraphVisualizer.LayoutType.LAYERED;
+                    break;
+            }
+            refreshGraph();
+        });
     }
+
+    private void refreshGraph() {
+        if (currentAnalysisResult != null) {
+            // Update graph visualizer settings
+            graphVisualizer.setLayoutType(currentLayoutType);
+            graphVisualizer.setShowLabels(showLabels);
+            graphVisualizer.setShowGrid(showGrid);
+
+            // Refresh the diagram
+            ScrollPane diagram = graphVisualizer.createGraphView(currentAnalysisResult);
+            diagramScrollPane.setContent(diagram);
+        }
+    }
+
 
     private void setupCheckBoxes() {
         // Set up check box listeners
         showLabelsCheckBox.setSelected(true);
         showGridCheckBox.setSelected(false);
         showMinimapCheckBox.setSelected(false);
+
+        // Add listeners
+        showLabelsCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            showLabels = newVal;
+            refreshGraph();
+        });
+
+        showGridCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            showGrid = newVal;
+            refreshGraph();
+        });
     }
 
     private void setupMemoryMonitoring() {
@@ -155,24 +206,27 @@ public class MainController {
         }
     }
 
+
     @FXML
     private void handleZoomIn() {
+        graphVisualizer.zoom(1.2, diagramScrollPane);
         currentZoomLevel *= 1.2;
         updateZoom();
     }
 
     @FXML
     private void handleZoomOut() {
+        graphVisualizer.zoom(0.8, diagramScrollPane);
         currentZoomLevel *= 0.8;
         updateZoom();
     }
 
     @FXML
     private void handleResetZoom() {
+        graphVisualizer.zoom(1.0/currentZoomLevel, diagramScrollPane);
         currentZoomLevel = 1.0;
         updateZoom();
     }
-
     @FXML
     private void handleFitToWindow() {
         showInfoDialog("Fit to Window", "Fit to window functionality", "Fit to window feature will be implemented in future versions.");
@@ -284,20 +338,7 @@ public class MainController {
         showInfoDialog("Auto Layout", "Auto layout functionality", "Auto layout feature will be implemented in future versions.");
     }
 
-    @FXML
-    private void handleHierarchicalLayout() {
-        showInfoDialog("Hierarchical Layout", "Hierarchical layout functionality", "Hierarchical layout feature will be implemented in future versions.");
-    }
 
-    @FXML
-    private void handleCircularLayout() {
-        showInfoDialog("Circular Layout", "Circular layout functionality", "Circular layout feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleForceDirectedLayout() {
-        showInfoDialog("Force-Directed Layout", "Force-directed layout functionality", "Force-directed layout feature will be implemented in future versions.");
-    }
 
     @FXML
     private void handleUserGuide() {
@@ -397,6 +438,11 @@ public class MainController {
     }
 
     private void updateVisualizationTabs(ProjectAnalysisResult result) {
+        // Set current settings before creating the graph
+        graphVisualizer.setLayoutType(currentLayoutType);
+        graphVisualizer.setShowLabels(showLabels);
+        graphVisualizer.setShowGrid(showGrid);
+
         // Update components list
         componentsListView.getItems().clear();
         result.getComponents().forEach(component ->
@@ -501,5 +547,30 @@ public class MainController {
         alert.setHeaderText(header);
         alert.setContentText(content);
         alert.showAndWait();
+    }
+
+    @FXML
+    private void handleHierarchicalLayout() {
+        layoutComboBox.setValue("Hierarchical");
+    }
+
+    @FXML
+    private void handleCircularLayout() {
+        layoutComboBox.setValue("Circular");
+    }
+
+    @FXML
+    private void handleForceDirectedLayout() {
+        layoutComboBox.setValue("Force-Directed");
+    }
+
+    @FXML
+    private void handleGridLayout() {
+        layoutComboBox.setValue("Grid");
+    }
+
+    @FXML
+    private void handleLayeredLayout() {
+        layoutComboBox.setValue("Layered");
     }
 }
