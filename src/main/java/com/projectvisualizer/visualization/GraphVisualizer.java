@@ -15,8 +15,14 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
+import com.projectvisualizer.visualization.render.EdgeRenderer;
+import com.projectvisualizer.visualization.ui.LegendFactory;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.projectvisualizer.models.*;
+import javafx.scene.control.Label;
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
 
 public class GraphVisualizer {
     // Constants for node sizing and spacing
@@ -52,21 +58,45 @@ public class GraphVisualizer {
     private Map<String, Circle> indicatorMap = new HashMap<>();
     private Map<ComponentRelationship, Path> edgeMap = new HashMap<>();
     private Pane graphPane;
+    private ScrollPane sharedScrollPane;
     private List<Path> edges = new ArrayList<>();
     private List<Polygon> arrowheads = new ArrayList<>();
     private double currentZoom = 1.0;
     private Set<String> selectedNodes = new HashSet<>();
+    // Holds the last created legend so controllers can place it in a fixed overlay
+    private VBox lastLegend;
 
+    // Add new layout types
     public enum LayoutType {
-        HIERARCHICAL, FORCE_DIRECTED, CIRCULAR, GRID, LAYERED
+        HIERARCHICAL, FORCE_DIRECTED, CIRCULAR, GRID, LAYERED,
+        USER_FLOW,           // NEW: Show user journey flows
+        BUSINESS_PROCESS,    // NEW: Show business processes
+        FEATURE_BASED,       // NEW: Group by features
+        HYBRID              // NEW: Combine multiple views
     }
+
+    // Add new visualization modes
+    public enum VisualizationMode {
+        TECHNICAL_ARCHITECTURE,  // Current implementation
+        USER_JOURNEY,           // NEW: Focus on user flows
+        BUSINESS_PROCESS,       // NEW: Focus on business logic
+        FEATURE_OVERVIEW,       // NEW: Feature-based grouping
+        INTEGRATION_MAP         // NEW: External integrations
+    }
+
+    private VisualizationMode currentMode = VisualizationMode.TECHNICAL_ARCHITECTURE;
 
     private LayoutType currentLayout = LayoutType.HIERARCHICAL;
     private boolean showGrid = false;
     private boolean showLabels = true;
 
     public ScrollPane createGraphView(ProjectAnalysisResult result) {
-        graphPane = new Pane();
+        if (graphPane == null) {
+            graphPane = new Pane();
+            graphPane.getStyleClass().add("graph-container");
+        } else {
+            graphPane.getChildren().clear();
+        }
         edges.clear();
         arrowheads.clear();
         nodeMap.clear();
@@ -76,21 +106,37 @@ public class GraphVisualizer {
         // Set up the graph pane with modern styling
         graphPane.getStyleClass().add("graph-container");
 
-        // Enhance the result with Start/End nodes
-        ProjectAnalysisResult enhancedResult = enhanceWithStartEndNodes(result);
+        // NEW: Create multi-mode visualization
+        switch (currentMode) {
+            case USER_JOURNEY:
+                return createUserJourneyView(result);
+            case BUSINESS_PROCESS:
+                return createBusinessProcessView(result);
+            case FEATURE_OVERVIEW:
+                return createFeatureBasedView(result);
+            case INTEGRATION_MAP:
+                return createIntegrationMapView(result);
+            case TECHNICAL_ARCHITECTURE:
+            default:
+                return createTechnicalArchitectureView(result);
+        }
 
-        // Calculate dynamic canvas size based on components
+        // REMOVE ALL THE CODE BELOW - IT'S UNREACHABLE!
+        // DELETE FROM HERE DOWN TO THE END OF THE METHOD
+    }
+
+
+    private ScrollPane createTechnicalArchitectureView(ProjectAnalysisResult result) {
+        // This should contain your EXISTING createGraphView logic
+        ProjectAnalysisResult enhancedResult = enhanceWithStartEndNodes(result);
         calculateDynamicCanvasSize(enhancedResult);
 
-        // Create background grid if enabled
         if (showGrid) {
             createBackgroundGrid();
         }
 
-        // Create nodes with modern styling
         createModernNodes(enhancedResult);
 
-        // Apply layout based on selected type
         switch (currentLayout) {
             case FORCE_DIRECTED:
                 applyForceDirectedLayout(enhancedResult, 300);
@@ -110,17 +156,452 @@ public class GraphVisualizer {
                 break;
         }
 
-        // Create enhanced edges
-        createEnhancedEdges(enhancedResult);
+        // Final pass to prevent any overlaps regardless of layout
+        resolveOverlapsForCurrentNodes();
 
-        // Add interactions and animations
+        createEnhancedEdges(enhancedResult);
         addModernInteractions(enhancedResult);
 
-        // Create scroll pane with enhanced features
-        ScrollPane scrollPane = createEnhancedScrollPane();
+        // Add legend for technical architecture
+        addTechnicalArchitectureLegend();
 
-        return scrollPane;
+        return createEnhancedScrollPane();
     }
+
+    private ScrollPane createUserJourneyView(ProjectAnalysisResult result) {
+        // Ensure canvas is properly sized and optional grid is shown
+        calculateDynamicCanvasSize(result);
+        if (showGrid) {
+            createBackgroundGrid();
+        }
+
+        // Extract user flows from Android components
+        List<UserFlowComponent> userFlows = extractUserFlows(result);
+
+        // Augment with synthetic Start/End and required navigation links
+        augmentUserFlowsWithStartEnd(userFlows);
+
+        // Create user flow nodes
+        createUserFlowNodes(userFlows);
+
+        // Apply user flow specific layout before edges so geometry is correct
+        applyUserFlowLayout(userFlows);
+
+        // Prevent overlaps before creating edges
+        resolveOverlapsForCurrentNodes();
+
+        // Create navigation flow edges after nodes are positioned
+        createNavigationFlowEdges(userFlows);
+
+        // Add a simple legend to help first-time readers
+        addUserJourneyLegend();
+
+        // Add progressive disclosure interactions
+        addProgressiveDisclosureInteractions(userFlows);
+
+        return createEnhancedScrollPane();
+    }
+
+    private List<UserFlowComponent> extractUserFlows(ProjectAnalysisResult result) {
+        List<UserFlowComponent> userFlows = new ArrayList<>();
+
+        for (CodeComponent component : result.getComponents()) {
+            if (isUserInterfaceComponent(component)) {
+                UserFlowComponent userFlow = createUserFlowFromComponent(component);
+
+                // FIXED: Handle navigation destinations correctly
+                if (component.getNavigationDestinations() != null) {
+                    for (NavigationDestination dest : component.getNavigationDestinations()) {
+                        NavigationFlow navFlow = new NavigationFlow();
+                        navFlow.setFlowId(component.getId() + "_to_" + dest.getDestinationId());
+                        navFlow.setSourceScreenId(component.getId());
+                        navFlow.setTargetScreenId(dest.getDestinationId());
+                        navFlow.setNavigationType(NavigationFlow.NavigationType.FORWARD);
+
+                        // Create NavigationPath and add to user flow
+                        NavigationPath navPath = new NavigationPath(navFlow);
+                        userFlow.addOutgoingPath(navPath);
+                    }
+                }
+
+                userFlows.add(userFlow);
+            }
+        }
+
+        // Categorize flow types
+        categorizeUserFlowTypes(userFlows, result);
+        return userFlows;
+    }
+
+
+    private boolean isUserInterfaceComponent(CodeComponent component) {
+        if (component.getType() == null) return false;
+
+        String type = component.getType().toLowerCase();
+        String name = component.getName().toLowerCase();
+        String extendsClass = component.getExtendsClass();
+
+        return type.contains("activity") ||
+                type.contains("fragment") ||
+                name.contains("activity") ||
+                name.contains("fragment") ||
+                (extendsClass != null && (
+                        extendsClass.contains("Activity") ||
+                                extendsClass.contains("Fragment") ||
+                                extendsClass.contains("DialogFragment")
+                ));
+    }
+
+    private UserFlowComponent createUserFlowFromComponent(CodeComponent component) {
+        UserFlowComponent userFlow = new UserFlowComponent();
+        userFlow.setId(component.getId());
+        userFlow.setScreenName(component.getName());
+        userFlow.setActivityName(component.getName());
+
+        // Analyze business context
+        BusinessContext context = analyzeBusinessContext(component);
+        userFlow.setBusinessContext(context);
+
+        // Extract user actions from component
+        List<UserAction> actions = extractUserActions(component);
+        userFlow.setUserActions(actions);
+
+        return userFlow;
+    }
+
+    private BusinessContext analyzeBusinessContext(CodeComponent component) {
+        String name = component.getName().toLowerCase();
+
+        // Determine business goal based on component name/type
+        String businessGoal = "Unknown";
+        String userPersona = "General User";
+
+        if (name.contains("login") || name.contains("auth")) {
+            businessGoal = "User Authentication";
+            userPersona = "New/Returning User";
+        } else if (name.contains("main") || name.contains("home")) {
+            businessGoal = "App Entry Point";
+            userPersona = "Authenticated User";
+        } else if (name.contains("profile") || name.contains("account")) {
+            businessGoal = "User Profile Management";
+            userPersona = "Registered User";
+        } else if (name.contains("payment") || name.contains("checkout")) {
+            businessGoal = "Transaction Processing";
+            userPersona = "Purchasing User";
+        } else if (name.contains("search")) {
+            businessGoal = "Content Discovery";
+            userPersona = "Content Consumer";
+        }
+
+        BusinessContext context = new BusinessContext(
+                component.getId() + "_context",
+                businessGoal,
+                userPersona
+        );
+
+        return context;
+    }
+
+    private List<UserAction> extractUserActions(CodeComponent component) {
+        List<UserAction> actions = new ArrayList<>();
+
+        // Analyze methods to infer user actions
+        for (CodeMethod method : component.getMethods()) {
+            String methodName = method.getName().toLowerCase();
+
+            if (methodName.contains("onclick") || methodName.contains("ontouch")) {
+                actions.add(new UserAction(
+                        method.getName(),
+                        "Tap " + extractTargetFromMethodName(methodName),
+                        UserAction.ActionType.TAP
+                ));
+            } else if (methodName.contains("onswipe")) {
+                actions.add(new UserAction(
+                        method.getName(),
+                        "Swipe " + extractTargetFromMethodName(methodName),
+                        UserAction.ActionType.SWIPE
+                ));
+            } else if (methodName.contains("ontext") || methodName.contains("oninput")) {
+                actions.add(new UserAction(
+                        method.getName(),
+                        "Enter Text",
+                        UserAction.ActionType.TYPE_TEXT
+                ));
+            }
+        }
+
+        return actions;
+    }
+
+    private void augmentUserFlowsWithStartEnd(List<UserFlowComponent> userFlows) {
+        // Build quick lookup by id for existing flows
+        Map<String, UserFlowComponent> byId = new HashMap<>();
+        for (UserFlowComponent f : userFlows) {
+            byId.put(f.getId(), f);
+        }
+
+        // Compute incoming counts for each existing node
+        Map<String, Integer> incoming = new HashMap<>();
+        for (UserFlowComponent f : userFlows) {
+            incoming.putIfAbsent(f.getId(), 0);
+        }
+        for (UserFlowComponent f : userFlows) {
+            if (f.getOutgoingPaths() != null) {
+                for (NavigationPath p : f.getOutgoingPaths()) {
+                    NavigationFlow nf = p.getNavigationFlow();
+                    if (nf != null && nf.getTargetScreenId() != null) {
+                        incoming.put(nf.getTargetScreenId(), incoming.getOrDefault(nf.getTargetScreenId(), 0) + 1);
+                    }
+                }
+            }
+        }
+
+        // Identify entries (no incoming) and exits (no outgoing)
+        List<UserFlowComponent> entries = new ArrayList<>();
+        List<UserFlowComponent> exits = new ArrayList<>();
+        for (UserFlowComponent f : userFlows) {
+            if (START_NODE_ID.equals(f.getId()) || END_NODE_ID.equals(f.getId())) continue;
+            int in = incoming.getOrDefault(f.getId(), 0);
+            boolean hasOutgoing = f.getOutgoingPaths() != null && !f.getOutgoingPaths().isEmpty();
+            if (in == 0) entries.add(f);
+            if (!hasOutgoing) exits.add(f);
+        }
+
+        // Create Start node if missing
+        UserFlowComponent start = byId.get(START_NODE_ID);
+        if (start == null) {
+            start = new UserFlowComponent();
+            start.setId(START_NODE_ID);
+            start.setScreenName("Start");
+            start.setActivityName("Start");
+            start.setFlowType(UserFlowComponent.FlowType.ENTRY_POINT);
+            userFlows.add(0, start);
+            byId.put(START_NODE_ID, start);
+        }
+
+        // Create End node if missing
+        UserFlowComponent end = byId.get(END_NODE_ID);
+        if (end == null) {
+            end = new UserFlowComponent();
+            end.setId(END_NODE_ID);
+            end.setScreenName("End");
+            end.setActivityName("End");
+            end.setFlowType(UserFlowComponent.FlowType.EXIT_POINT);
+            userFlows.add(end);
+            byId.put(END_NODE_ID, end);
+        }
+
+        // Ensure Start has outgoing to each entry; if none entries and there are normal nodes, pick first normal
+        if (start.getOutgoingPaths() == null) start.setOutgoingPaths(new ArrayList<>());
+        if (entries.isEmpty()) {
+            // Fallback: if there are any normal nodes, connect to the first one
+            for (UserFlowComponent f : userFlows) {
+                if (!START_NODE_ID.equals(f.getId()) && !END_NODE_ID.equals(f.getId())) {
+                    entries.add(f);
+                    break;
+                }
+            }
+        }
+        for (UserFlowComponent e : entries) {
+            boolean alreadyLinked = start.getOutgoingPaths().stream()
+                    .map(NavigationPath::getNavigationFlow)
+                    .filter(Objects::nonNull)
+                    .anyMatch(nf -> e.getId().equals(nf.getTargetScreenId()));
+            if (!alreadyLinked) {
+                NavigationFlow nf = new NavigationFlow();
+                nf.setFlowId(START_NODE_ID + "_to_" + e.getId());
+                nf.setSourceScreenId(START_NODE_ID);
+                nf.setTargetScreenId(e.getId());
+                nf.setNavigationType(NavigationFlow.NavigationType.FORWARD);
+                start.addOutgoingPath(new NavigationPath(nf));
+            }
+        }
+
+        // Ensure each exit connects to End
+        for (UserFlowComponent x : exits) {
+            if (x.getOutgoingPaths() == null) x.setOutgoingPaths(new ArrayList<>());
+            boolean linkedToEnd = x.getOutgoingPaths().stream()
+                    .map(NavigationPath::getNavigationFlow)
+                    .filter(Objects::nonNull)
+                    .anyMatch(nf -> END_NODE_ID.equals(nf.getTargetScreenId()));
+            if (!linkedToEnd) {
+                NavigationFlow nf = new NavigationFlow();
+                nf.setFlowId(x.getId() + "_to_" + END_NODE_ID);
+                nf.setSourceScreenId(x.getId());
+                nf.setTargetScreenId(END_NODE_ID);
+                nf.setNavigationType(NavigationFlow.NavigationType.FORWARD);
+                x.addOutgoingPath(new NavigationPath(nf));
+            }
+        }
+
+        // Reorder list to guarantee Start first and End last
+        userFlows.removeIf(f -> START_NODE_ID.equals(f.getId()) || END_NODE_ID.equals(f.getId()));
+        userFlows.add(0, start);
+        userFlows.add(end);
+    }
+
+    private void createUserFlowNodes(List<UserFlowComponent> userFlows) {
+        for (UserFlowComponent flow : userFlows) {
+            Shape node = createUserFlowNode(flow);
+            nodeMap.put(flow.getId(), node);
+            graphPane.getChildren().add(node);
+
+            // Create a direct Text label and register it, honoring showLabels
+            if (showLabels) {
+                Text label = new Text(flow.getScreenName());
+                label.setFont(Font.font("System", FontWeight.BOLD, 14));
+                label.setFill(Color.BLACK);
+                labelMap.put(flow.getId(), label);
+                graphPane.getChildren().add(label);
+            }
+        }
+    }
+
+    private Shape createUserFlowNode(UserFlowComponent flow) {
+        Rectangle rect = new Rectangle(NODE_WIDTH + 40, NODE_HEIGHT + 30);
+        rect.setArcWidth(20);
+        rect.setArcHeight(20);
+
+        // Color based on flow type
+        Color fillColor = getColorForFlowType(flow.getFlowType());
+        rect.setFill(fillColor);
+
+        // Enhanced styling for user flow nodes
+        rect.setStroke(Color.web("#2d3748"));
+        rect.setStrokeWidth(2);
+
+        // Add glow effect for important flows
+        if (flow.getFlowType() == UserFlowComponent.FlowType.ENTRY_POINT ||
+                flow.getFlowType() == UserFlowComponent.FlowType.DECISION_POINT) {
+
+            DropShadow glow = new DropShadow();
+            glow.setRadius(15);
+            glow.setColor(fillColor);
+            rect.setEffect(glow);
+        }
+
+        return rect;
+    }
+
+    private Color getColorForFlowType(UserFlowComponent.FlowType flowType) {
+        switch (flowType) {
+            case ENTRY_POINT: return Color.web("#10b981"); // Green
+            case MAIN_FLOW: return Color.web("#3b82f6");   // Blue
+            case DECISION_POINT: return Color.web("#f59e0b"); // Yellow
+            case EXIT_POINT: return Color.web("#ef4444");  // Red
+            case ERROR_HANDLING: return Color.web("#f97316"); // Orange
+            default: return Color.web("#6b7280"); // Gray
+        }
+    }
+
+    // NEW: Create enhanced label with business context
+    private VBox createEnhancedUserFlowLabel(UserFlowComponent flow) {
+        VBox container = new VBox(5);
+        container.setAlignment(javafx.geometry.Pos.CENTER);
+
+        // Screen name
+        Text screenLabel = new Text(flow.getScreenName());
+        screenLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+        screenLabel.setFill(Color.BLACK);
+
+        // Business context
+        if (flow.getBusinessContext() != null) {
+            Text contextLabel = new Text(flow.getBusinessContext().getBusinessGoal());
+            contextLabel.setFont(Font.font("System", FontWeight.NORMAL, 11));
+            contextLabel.setFill(Color.web("#6b7280"));
+            container.getChildren().addAll(screenLabel, contextLabel);
+        } else {
+            container.getChildren().add(screenLabel);
+        }
+
+        return container;
+    }
+
+    private ScrollPane createBusinessProcessView(ProjectAnalysisResult result) {
+        // Ensure canvas is properly sized and optional grid is shown
+        calculateDynamicCanvasSize(result);
+        if (showGrid) {
+            createBackgroundGrid();
+        }
+
+        List<BusinessProcessComponent> processes = extractBusinessProcesses(result);
+
+        // Create process flow visualization
+        createBusinessProcessNodes(processes);
+        // Layout nodes before creating edges so edge geometry is correct
+        applyBusinessProcessLayout(processes);
+
+        // Prevent overlaps before creating edges
+        resolveOverlapsForCurrentNodes();
+
+        createBusinessProcessEdges(processes);
+
+        // Add legend for business process view
+        addBusinessProcessLegend();
+
+        return createEnhancedScrollPane();
+    }
+
+    // NEW: Create feature-based grouping visualization
+    private ScrollPane createFeatureBasedView(ProjectAnalysisResult result) {
+        // Ensure canvas is properly sized and optional grid is shown
+        calculateDynamicCanvasSize(result);
+        if (showGrid) {
+            createBackgroundGrid();
+        }
+
+        List<FeatureGroup> featureGroups = groupComponentsByFeature(result);
+
+        // Create feature group visualization
+        createFeatureGroupNodes(featureGroups);
+        // Layout nodes before creating edges so edge geometry is correct
+        applyFeatureGroupLayout(featureGroups);
+
+        // Prevent overlaps before creating edges
+        resolveOverlapsForCurrentNodes();
+
+        createFeatureGroupEdges(featureGroups);
+
+        // Add legend for feature overview
+        addFeatureOverviewLegend();
+
+        return createEnhancedScrollPane();
+    }
+
+    private void addProgressiveDisclosureInteractions(List<UserFlowComponent> userFlows) {
+        for (UserFlowComponent flow : userFlows) {
+            Shape node = nodeMap.get(flow.getId());
+            if (node != null) {
+                node.setOnMouseClicked(event -> {
+                    if (event.getClickCount() == 2) {
+                        // Double-click to drill down
+                        showDetailedView(flow);
+                    } else {
+                        // Single-click to show context
+                        showContextualInfo(flow);
+                    }
+                });
+            }
+        }
+    }
+
+    // NEW: Show detailed view of a flow
+    private void showDetailedView(UserFlowComponent flow) {
+        // Create popup or side panel with detailed information
+        showFlowDetailsDialog(flow);
+    }
+
+    // NEW: Show contextual information
+    private void showContextualInfo(UserFlowComponent flow) {
+        // Update context panel with flow information
+        displayFlowContext(flow);
+    }
+
+    // Setters for new modes
+    public void setVisualizationMode(VisualizationMode mode) {
+        this.currentMode = mode;
+    }
+
 
     private void calculateDynamicCanvasSize(ProjectAnalysisResult result) {
         int componentCount = result.getComponents().size();
@@ -236,29 +717,6 @@ public class GraphVisualizer {
         addIntelligentConnections(enhanced);
 
         return enhanced;
-    }
-
-    private void addIntelligentConnections(ProjectAnalysisResult result) {
-        Set<String> entryPoints = findEntryPoints(result);
-        Set<String> exitPoints = findExitPoints(result);
-
-        // Connect start to entry points
-        for (String entryId : entryPoints) {
-            ComponentRelationship rel = new ComponentRelationship();
-            rel.setSourceId(START_NODE_ID);
-            rel.setTargetId(entryId);
-            rel.setType("STARTS");
-            result.addRelationship(rel);
-        }
-
-        // Connect exit points to end
-        for (String exitId : exitPoints) {
-            ComponentRelationship rel = new ComponentRelationship();
-            rel.setSourceId(exitId);
-            rel.setTargetId(END_NODE_ID);
-            rel.setType("TERMINATES");
-            result.addRelationship(rel);
-        }
     }
 
     private Set<String> findEntryPoints(ProjectAnalysisResult result) {
@@ -420,105 +878,18 @@ public class GraphVisualizer {
     }
 
     private Path createCurvedEdge(Shape source, Shape target, String relationshipType) {
-        Path path = new Path();
-
-        double startX, startY, endX, endY;
-
-        if (source instanceof Rectangle) {
-            Rectangle rect = (Rectangle) source;
-            startX = rect.getX() + rect.getWidth() / 2;
-            startY = rect.getY() + rect.getHeight() / 2;
-        } else if (source instanceof Ellipse) {
-            Ellipse ellipse = (Ellipse) source;
-            startX = ellipse.getCenterX();
-            startY = ellipse.getCenterY();
-        } else {
-            startX = source.getBoundsInParent().getMinX();
-            startY = source.getBoundsInParent().getMinY();
-        }
-
-        if (target instanceof Rectangle) {
-            Rectangle rect = (Rectangle) target;
-            endX = rect.getX() + rect.getWidth() / 2;
-            endY = rect.getY() + rect.getHeight() / 2;
-        } else if (target instanceof Ellipse) {
-            Ellipse ellipse = (Ellipse) target;
-            endX = ellipse.getCenterX();
-            endY = ellipse.getCenterY();
-        } else {
-            endX = target.getBoundsInParent().getMinX();
-            endY = target.getBoundsInParent().getMinY();
-        }
-
-        // Create a curved path
-        double controlX = (startX + endX) / 2;
-        double controlY = (startY + endY) / 2 - CURVE_STRENGTH;
-
-        path.getElements().add(new MoveTo(startX, startY));
-        path.getElements().add(new QuadCurveTo(controlX, controlY, endX, endY));
-
-        // Style based on relationship type
-        path.setStroke(getColorForRelationship(relationshipType));
-        path.setStrokeWidth(2.5);
-        path.setOpacity(0.8);
-        path.setStrokeLineCap(StrokeLineCap.ROUND);
-
-        // Add dash pattern for certain relationship types
-        if ("DEPENDS".equals(relationshipType)) {
-            path.getStrokeDashArray().addAll(5d, 5d);
-        }
-
-        return path;
+        // Delegated to EdgeRenderer for cleaner separation of concerns
+        return EdgeRenderer.createCurvedEdge(source, target, relationshipType, CURVE_STRENGTH);
     }
 
     private Color getColorForRelationship(String relationshipType) {
-        if (relationshipType == null) return GRAY_400;
-
-        switch (relationshipType) {
-            case "EXTENDS": return PRIMARY_500;
-            case "IMPLEMENTS": return PURPLE;
-            case "USES": return INFO;
-            case "DEPENDS": return WARNING;
-            case "STARTS": return SUCCESS;
-            case "TERMINATES": return ERROR;
-            default: return GRAY_400;
-        }
+        // Delegate to EdgeRenderer for consistent coloring
+        return EdgeRenderer.getColorForRelationship(relationshipType);
     }
 
     private Polygon createArrowhead(Path edge) {
-        Polygon arrowhead = new Polygon();
-        arrowhead.getPoints().addAll(
-                0.0, 0.0,
-                -ARROW_SIZE, -ARROW_SIZE / 2,
-                -ARROW_SIZE, ARROW_SIZE / 2
-        );
-
-        // Position at the end of the path
-        PathElement lastElement = edge.getElements().get(edge.getElements().size() - 1);
-        if (lastElement instanceof QuadCurveTo) {
-            QuadCurveTo curve = (QuadCurveTo) lastElement;
-            arrowhead.setTranslateX(curve.getX());
-            arrowhead.setTranslateY(curve.getY());
-        }
-
-        // Rotate to point in the direction of the curve
-        PathElement firstElement = edge.getElements().get(edge.getElements().size() - 2);
-        if (firstElement instanceof MoveTo && lastElement instanceof QuadCurveTo) {
-            MoveTo move = (MoveTo) firstElement;
-            QuadCurveTo curve = (QuadCurveTo) lastElement;
-
-            double dx = curve.getX() - move.getX();
-            double dy = curve.getY() - move.getY();
-            double angle = Math.toDegrees(Math.atan2(dy, dx));
-
-            arrowhead.setRotate(angle);
-        }
-
-        arrowhead.setFill(edge.getStroke());
-        arrowhead.setStroke(edge.getStroke());
-        arrowhead.setStrokeWidth(1);
-
-        return arrowhead;
+        // Delegated to EdgeRenderer for consistent arrow styling
+        return EdgeRenderer.createArrowhead(edge, ARROW_SIZE);
     }
 
     private void addModernInteractions(ProjectAnalysisResult result) {
@@ -712,24 +1083,27 @@ public class GraphVisualizer {
     }
 
     private ScrollPane createEnhancedScrollPane() {
-        ScrollPane scrollPane = new ScrollPane(graphPane);
-        scrollPane.setFitToWidth(false);
-        scrollPane.setFitToHeight(false);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        scrollPane.setPannable(true);
-        scrollPane.getStyleClass().add("graph-scroll-pane");
+        if (sharedScrollPane == null) {
+            sharedScrollPane = new ScrollPane();
+            sharedScrollPane.setFitToWidth(false);
+            sharedScrollPane.setFitToHeight(false);
+            sharedScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+            sharedScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+            sharedScrollPane.setPannable(true);
+            sharedScrollPane.getStyleClass().add("graph-scroll-pane");
 
-        // Enhanced zoom with mouse wheel
-        scrollPane.setOnScroll(event -> {
-            if (event.isControlDown()) {
-                double zoomFactor = event.getDeltaY() > 0 ? 1.1 : 0.9;
-                zoom(zoomFactor, scrollPane);
-                event.consume();
-            }
-        });
-
-        return scrollPane;
+            // Enhanced zoom with mouse wheel (register once)
+            sharedScrollPane.setOnScroll(event -> {
+                if (event.isControlDown()) {
+                    double zoomFactor = event.getDeltaY() > 0 ? 1.1 : 0.9;
+                    zoom(zoomFactor, sharedScrollPane);
+                    event.consume();
+                }
+            });
+        }
+        // Always point to current graphPane
+        sharedScrollPane.setContent(graphPane);
+        return sharedScrollPane;
     }
 
     public void zoom(double factor, ScrollPane scrollPane) {
@@ -744,6 +1118,42 @@ public class GraphVisualizer {
         scaleTransition.setToY(currentZoom);
         scaleTransition.setInterpolator(Interpolator.EASE_OUT);
         scaleTransition.play();
+    }
+
+    public void fitToWindow(ScrollPane scrollPane) {
+        if (graphPane == null || scrollPane == null) return;
+
+        // Ensure we are using layout bounds (unscaled) for accurate sizing
+        javafx.geometry.Bounds bounds = graphPane.getLayoutBounds();
+        double contentWidth = bounds.getWidth();
+        double contentHeight = bounds.getHeight();
+
+        double viewportWidth = scrollPane.getViewportBounds().getWidth();
+        double viewportHeight = scrollPane.getViewportBounds().getHeight();
+
+        if (contentWidth <= 0 || contentHeight <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
+            return; // Nothing to fit yet
+        }
+
+        double padding = 40.0; // small margin so content doesn't touch edges
+        double scaleX = (viewportWidth - padding) / contentWidth;
+        double scaleY = (viewportHeight - padding) / contentHeight;
+        double scale = Math.min(scaleX, scaleY);
+
+        // Clamp to allowed range
+        scale = Math.max(0.1, Math.min(5.0, scale));
+        currentZoom = scale;
+
+        graphPane.setScaleX(scale);
+        graphPane.setScaleY(scale);
+
+        // Center the content
+        scrollPane.setHvalue(0.5);
+        scrollPane.setVvalue(0.5);
+    }
+
+    public double getCurrentZoom() {
+        return currentZoom;
     }
 
     private boolean isSpecialNode(CodeComponent component) {
@@ -1083,14 +1493,19 @@ public class GraphVisualizer {
         }
 
         // Force-directed parameters
-        double k = Math.sqrt(width * height / result.getComponents().size());
+        int n = Math.max(1, result.getComponents().size());
+        double k = Math.sqrt(width * height / n);
         double repulsion = k * k;
         double attraction = k;
-        double damping = 0.8;
-        double maxForce = 10.0;
-        double minDistance = MIN_NODE_DISTANCE; // Use the minimum distance constant
+        double damping = 0.85; // slightly stronger damping for stability
+        double maxForce = 15.0;
+        double epsilon = 0.0001; // avoid division by zero
+        double padding = 80; // keep away from hard edges
 
-        for (int iter = 0; iter < iterations; iter++) {
+        // Adapt iterations to graph size if caller passed a small value
+        int iters = Math.max(iterations, Math.min(800, 200 + n * 4));
+
+        for (int iter = 0; iter < iters; iter++) {
             Map<String, double[]> forces = new HashMap<>();
 
             // Initialize forces to zero
@@ -1099,29 +1514,29 @@ public class GraphVisualizer {
             }
 
             // Calculate repulsive forces between all pairs of nodes
-            for (String node1 : positions.keySet()) {
-                for (String node2 : positions.keySet()) {
-                    if (node1.equals(node2)) continue;
+            List<String> nodeIds = new ArrayList<>(positions.keySet());
+            for (int i = 0; i < nodeIds.size(); i++) {
+                for (int j = i + 1; j < nodeIds.size(); j++) {
+                    String node1 = nodeIds.get(i);
+                    String node2 = nodeIds.get(j);
 
                     double[] pos1 = positions.get(node1);
                     double[] pos2 = positions.get(node2);
                     double dx = pos1[0] - pos2[0];
                     double dy = pos1[1] - pos2[1];
-                    double distance = Math.max(minDistance, Math.sqrt(dx * dx + dy * dy));
+                    double distance = Math.max(epsilon, Math.sqrt(dx * dx + dy * dy));
 
-                    if (distance > 0) {
-                        double force = repulsion / (distance * distance);
-                        double fx = force * dx / distance;
-                        double fy = force * dy / distance;
+                    // Repulsive force (Fruchterman-Reingold)
+                    double force = repulsion / (distance * distance);
+                    double fx = force * dx / distance;
+                    double fy = force * dy / distance;
 
-                        double[] force1 = forces.get(node1);
-                        force1[0] += fx;
-                        force1[1] += fy;
-
-                        double[] force2 = forces.get(node2);
-                        force2[0] -= fx;
-                        force2[1] -= fy;
-                    }
+                    double[] f1 = forces.get(node1);
+                    f1[0] += fx;
+                    f1[1] += fy;
+                    double[] f2 = forces.get(node2);
+                    f2[0] -= fx;
+                    f2[1] -= fy;
                 }
             }
 
@@ -1136,35 +1551,34 @@ public class GraphVisualizer {
                 double[] pos2 = positions.get(targetId);
                 double dx = pos1[0] - pos2[0];
                 double dy = pos1[1] - pos2[1];
-                double distance = Math.max(minDistance, Math.sqrt(dx * dx + dy * dy));
+                double distance = Math.max(epsilon, Math.sqrt(dx * dx + dy * dy));
 
-                if (distance > 0) {
-                    double force = attraction * Math.log(distance / k);
-                    double fx = force * dx / distance;
-                    double fy = force * dy / distance;
+                // Attractive force
+                double force = (distance * distance) / k; // standard FR attractive term
+                double fx = force * dx / distance;
+                double fy = force * dy / distance;
 
-                    if (!fixedNodes.get(sourceId)) {
-                        double[] force1 = forces.get(sourceId);
-                        force1[0] -= fx;
-                        force1[1] -= fy;
-                    }
-
-                    if (!fixedNodes.get(targetId)) {
-                        double[] force2 = forces.get(targetId);
-                        force2[0] += fx;
-                        force2[1] += fy;
-                    }
+                if (!Boolean.TRUE.equals(fixedNodes.get(sourceId))) {
+                    double[] f1 = forces.get(sourceId);
+                    f1[0] -= fx;
+                    f1[1] -= fy;
+                }
+                if (!Boolean.TRUE.equals(fixedNodes.get(targetId))) {
+                    double[] f2 = forces.get(targetId);
+                    f2[0] += fx;
+                    f2[1] += fy;
                 }
             }
 
             // Apply forces and update positions
+            double maxDisp = 0;
             for (String nodeId : positions.keySet()) {
-                if (fixedNodes.get(nodeId)) continue;
+                if (Boolean.TRUE.equals(fixedNodes.get(nodeId))) continue;
 
                 double[] force = forces.get(nodeId);
                 double forceMagnitude = Math.sqrt(force[0] * force[0] + force[1] * force[1]);
 
-                // Limit maximum force
+                // Limit maximum force for stability
                 if (forceMagnitude > maxForce) {
                     force[0] = force[0] * maxForce / forceMagnitude;
                     force[1] = force[1] * maxForce / forceMagnitude;
@@ -1180,11 +1594,21 @@ public class GraphVisualizer {
                 position[0] += velocity[0];
                 position[1] += velocity[1];
 
-                // Keep within bounds
-                position[0] = Math.max(100, Math.min(width - 100, position[0]));
-                position[1] = Math.max(100, Math.min(height - 100, position[1]));
+                maxDisp = Math.max(maxDisp, Math.sqrt(velocity[0] * velocity[0] + velocity[1] * velocity[1]));
+
+                // Keep within bounds with padding
+                position[0] = Math.max(padding, Math.min(width - padding, position[0]));
+                position[1] = Math.max(padding, Math.min(height - padding, position[1]));
+            }
+
+            // Early exit if motion is very small
+            if (maxDisp < 0.05) {
+                break;
             }
         }
+
+        // Collision resolution pass to ensure non-overlap and respect MIN_NODE_DISTANCE
+        resolveOverlapsForCurrentNodesUsingPositions(positions, fixedNodes, width, height);
 
         // Apply final positions to JavaFX nodes
         for (CodeComponent comp : result.getComponents()) {
@@ -1232,6 +1656,127 @@ public class GraphVisualizer {
         }
     }
 
+    // Utility: resolve overlaps by adjusting positions map (used by force-directed)
+    private void resolveOverlapsForCurrentNodesUsingPositions(Map<String, double[]> positions,
+                                                              Map<String, Boolean> fixedNodes,
+                                                              double width,
+                                                              double height) {
+        double minDist = MIN_NODE_DISTANCE;
+        double padding = 80;
+        List<String> ids = new ArrayList<>(positions.keySet());
+
+        for (int pass = 0; pass < 12; pass++) {
+            boolean anyMoved = false;
+            for (int i = 0; i < ids.size(); i++) {
+                for (int j = i + 1; j < ids.size(); j++) {
+                    String a = ids.get(i);
+                    String b = ids.get(j);
+                    // Skip if either is not a rectangle-backed node
+                    Shape na = nodeMap.get(a);
+                    Shape nb = nodeMap.get(b);
+                    if (!(na instanceof Rectangle) || !(nb instanceof Rectangle)) continue;
+
+                    double[] pa = positions.get(a);
+                    double[] pb = positions.get(b);
+                    if (pa == null || pb == null) continue;
+
+                    double dx = pb[0] - pa[0];
+                    double dy = pb[1] - pa[1];
+                    double dist = Math.max(0.0001, Math.sqrt(dx * dx + dy * dy));
+
+                    if (dist < minDist) {
+                        double overlap = (minDist - dist);
+                        double ux = dx / dist;
+                        double uy = dy / dist;
+                        double moveX = ux * overlap / 2.0;
+                        double moveY = uy * overlap / 2.0;
+
+                        if (!Boolean.TRUE.equals(fixedNodes.get(a))) {
+                            pa[0] -= moveX;
+                            pa[1] -= moveY;
+                            pa[0] = Math.max(padding, Math.min(width - padding, pa[0]));
+                            pa[1] = Math.max(padding, Math.min(height - padding, pa[1]));
+                            anyMoved = true;
+                        }
+                        if (!Boolean.TRUE.equals(fixedNodes.get(b))) {
+                            pb[0] += moveX;
+                            pb[1] += moveY;
+                            pb[0] = Math.max(padding, Math.min(width - padding, pb[0]));
+                            pb[1] = Math.max(padding, Math.min(height - padding, pb[1]));
+                            anyMoved = true;
+                        }
+                    }
+                }
+            }
+            if (!anyMoved) break;
+        }
+    }
+
+    // Generic de-overlap for any already-positioned rectangle nodes on the pane
+    private void resolveOverlapsForCurrentNodes() {
+        // Collect rectangle nodes
+        List<Map.Entry<String, Shape>> items = new ArrayList<>(nodeMap.entrySet());
+        double minDist = MIN_NODE_DISTANCE;
+        double padding = 80;
+
+        for (int pass = 0; pass < 10; pass++) {
+            boolean moved = false;
+            for (int i = 0; i < items.size(); i++) {
+                for (int j = i + 1; j < items.size(); j++) {
+                    String idA = items.get(i).getKey();
+                    String idB = items.get(j).getKey();
+                    Shape sa = items.get(i).getValue();
+                    Shape sb = items.get(j).getValue();
+                    if (!(sa instanceof Rectangle) || !(sb instanceof Rectangle)) continue;
+
+                    Rectangle ra = (Rectangle) sa;
+                    Rectangle rb = (Rectangle) sb;
+                    double ax = ra.getX() + NODE_WIDTH / 2.0;
+                    double ay = ra.getY() + NODE_HEIGHT / 2.0;
+                    double bx = rb.getX() + NODE_WIDTH / 2.0;
+                    double by = rb.getY() + NODE_HEIGHT / 2.0;
+
+                    double dx = bx - ax;
+                    double dy = by - ay;
+                    double dist = Math.max(0.0001, Math.sqrt(dx * dx + dy * dy));
+
+                    if (dist < minDist) {
+                        double overlap = (minDist - dist);
+                        double ux = dx / dist;
+                        double uy = dy / dist;
+                        double moveX = ux * overlap / 2.0;
+                        double moveY = uy * overlap / 2.0;
+
+                        // Move rectangles apart
+                        ra.setX(Math.max(padding, Math.min(graphPane.getPrefWidth() - padding - NODE_WIDTH, ra.getX() - moveX)));
+                        ra.setY(Math.max(padding, Math.min(graphPane.getPrefHeight() - padding - NODE_HEIGHT, ra.getY() - moveY)));
+                        rb.setX(Math.max(padding, Math.min(graphPane.getPrefWidth() - padding - NODE_WIDTH, rb.getX() + moveX)));
+                        rb.setY(Math.max(padding, Math.min(graphPane.getPrefHeight() - padding - NODE_HEIGHT, rb.getY() + moveY)));
+
+                        // Update labels/indicators for these two
+                        updateLabelAndIndicatorForNode(idA, ra.getX(), ra.getY());
+                        updateLabelAndIndicatorForNode(idB, rb.getX(), rb.getY());
+                        moved = true;
+                    }
+                }
+            }
+            if (!moved) break;
+        }
+    }
+
+    private void updateLabelAndIndicatorForNode(String nodeId, double rectX, double rectY) {
+        Text label = labelMap.get(nodeId);
+        if (label != null) {
+            double textWidth = label.getLayoutBounds().getWidth();
+            label.setX(rectX + NODE_WIDTH / 2.0 - textWidth / 2.0);
+            label.setY(rectY + NODE_HEIGHT + 20);
+        }
+        Circle indicator = indicatorMap.get(nodeId);
+        if (indicator != null) {
+            indicator.setCenterX(rectX + NODE_WIDTH - 15);
+            indicator.setCenterY(rectY + 15);
+        }
+    }
 
     public void setLayoutType(LayoutType layoutType) {
         this.currentLayout = layoutType;
@@ -1243,5 +1788,433 @@ public class GraphVisualizer {
 
     public void setShowGrid(boolean showGrid) {
         this.showGrid = showGrid;
+    }
+
+    //
+
+    private void applyUserFlowLayout(List<UserFlowComponent> userFlows) {
+        // Clearer, level-based left-to-right layout derived from navigation paths (BFS from Start)
+        double leftMargin = 120;
+        double topMargin = 140;
+        double spacingX = 320;
+        double spacingY = 220;
+
+        // Index flows by id
+        Map<String, UserFlowComponent> byId = new HashMap<>();
+        for (UserFlowComponent f : userFlows) {
+            byId.put(f.getId(), f);
+        }
+
+        // Build adjacency from outgoing paths
+        Map<String, List<String>> adj = new HashMap<>();
+        for (UserFlowComponent f : userFlows) {
+            List<String> outs = new ArrayList<>();
+            if (f.getOutgoingPaths() != null) {
+                for (NavigationPath p : f.getOutgoingPaths()) {
+                    NavigationFlow nf = p.getNavigationFlow();
+                    if (nf != null && nf.getTargetScreenId() != null) {
+                        outs.add(nf.getTargetScreenId());
+                    }
+                }
+            }
+            adj.put(f.getId(), outs);
+        }
+
+        // Compute levels with BFS from Start node (fallback to first element)
+        String startId = byId.containsKey(START_NODE_ID) ? START_NODE_ID : (userFlows.isEmpty() ? null : userFlows.get(0).getId());
+        Map<String, Integer> level = new HashMap<>();
+        if (startId != null) {
+            Deque<String> dq = new ArrayDeque<>();
+            dq.add(startId);
+            level.put(startId, 0);
+            while (!dq.isEmpty()) {
+                String u = dq.removeFirst();
+                int lu = level.get(u);
+                List<String> outs = adj.getOrDefault(u, Collections.emptyList());
+                for (String v : outs) {
+                    if (!level.containsKey(v)) {
+                        level.put(v, lu + 1);
+                        dq.addLast(v);
+                    } else {
+                        // keep the smallest level for clarity
+                        level.put(v, Math.min(level.get(v), lu + 1));
+                    }
+                }
+            }
+        }
+
+        // Any unvisited nodes: assign them after max level
+        int maxLevel = level.values().stream().mapToInt(i -> i).max().orElse(0);
+        for (UserFlowComponent f : userFlows) {
+            level.putIfAbsent(f.getId(), maxLevel + 1);
+        }
+
+        // Ensure End is at the last level
+        if (byId.containsKey(END_NODE_ID)) {
+            int newMax = level.values().stream().mapToInt(i -> i).max().orElse(0);
+            level.put(END_NODE_ID, newMax);
+        }
+
+        // Group by level
+        Map<Integer, List<UserFlowComponent>> byLevel = new TreeMap<>();
+        for (UserFlowComponent f : userFlows) {
+            int lv = level.getOrDefault(f.getId(), 0);
+            byLevel.computeIfAbsent(lv, k -> new ArrayList<>()).add(f);
+        }
+
+        // Layout nodes column by column
+        for (Map.Entry<Integer, List<UserFlowComponent>> entry : byLevel.entrySet()) {
+            int lv = entry.getKey();
+            List<UserFlowComponent> col = entry.getValue();
+
+            // Sort for stability: Entry/Decision/Main/Exit
+            col.sort(Comparator.comparing((UserFlowComponent f) -> f.getFlowType() == UserFlowComponent.FlowType.ENTRY_POINT ? 0 :
+                    f.getFlowType() == UserFlowComponent.FlowType.DECISION_POINT ? 1 :
+                    f.getFlowType() == UserFlowComponent.FlowType.MAIN_FLOW ? 2 : 3)
+                    .thenComparing(UserFlowComponent::getScreenName, Comparator.nullsLast(String::compareToIgnoreCase)));
+
+            for (int i = 0; i < col.size(); i++) {
+                UserFlowComponent f = col.get(i);
+                Shape node = nodeMap.get(f.getId());
+                if (!(node instanceof Rectangle)) continue;
+
+                double x = leftMargin + lv * spacingX;
+                double y = topMargin + i * spacingY;
+                ((Rectangle) node).setX(x);
+                ((Rectangle) node).setY(y);
+
+                // Label position under node
+                Text label = labelMap.get(f.getId());
+                if (label != null) {
+                    double nodeWidth = NODE_WIDTH + 40;
+                    double textWidth = label.getLayoutBounds().getWidth();
+                    label.setX(x + nodeWidth / 2 - textWidth / 2);
+                    label.setY(y + (NODE_HEIGHT + 30) + 20);
+                }
+            }
+        }
+    }
+
+    private void categorizeUserFlowTypes(List<UserFlowComponent> userFlows, ProjectAnalysisResult result) {
+        // Simple categorization based on naming patterns
+        for (UserFlowComponent flow : userFlows) {
+            String name = flow.getScreenName().toLowerCase();
+
+            if (name.contains("main") || name.contains("home") || name.contains("splash")) {
+                flow.setFlowType(UserFlowComponent.FlowType.ENTRY_POINT);
+            } else if (name.contains("error") || name.contains("exception")) {
+                flow.setFlowType(UserFlowComponent.FlowType.ERROR_HANDLING);
+            } else if (flow.getOutgoingPaths().size() > 1) {
+                flow.setFlowType(UserFlowComponent.FlowType.DECISION_POINT);
+            } else if (flow.getOutgoingPaths().isEmpty()) {
+                flow.setFlowType(UserFlowComponent.FlowType.EXIT_POINT);
+            } else {
+                flow.setFlowType(UserFlowComponent.FlowType.MAIN_FLOW);
+            }
+        }
+    }
+
+    // 3. BUSINESS PROCESS METHODS (Simplified implementations)
+    private List<BusinessProcessComponent> extractBusinessProcesses(ProjectAnalysisResult result) {
+        List<BusinessProcessComponent> processes = new ArrayList<>();
+
+        // Create a sample business process for now
+        BusinessProcessComponent authProcess = new BusinessProcessComponent();
+        authProcess.setProcessId("auth_process");
+        authProcess.setProcessName("User Authentication");
+        authProcess.setProcessType(BusinessProcessComponent.ProcessType.AUTHENTICATION);
+        authProcess.setCriticalityLevel(BusinessProcessComponent.CriticalityLevel.CRITICAL);
+
+        processes.add(authProcess);
+        return processes;
+    }
+
+    private void createBusinessProcessNodes(List<BusinessProcessComponent> processes) {
+        for (BusinessProcessComponent process : processes) {
+            Rectangle node = new Rectangle(NODE_WIDTH, NODE_HEIGHT);
+            node.setFill(Color.web("#f59e0b")); // Yellow for processes
+            node.setArcWidth(15);
+            node.setArcHeight(15);
+
+            nodeMap.put(process.getProcessId(), node);
+            graphPane.getChildren().add(node);
+
+            // Label
+            if (showLabels) {
+                Text label = new Text(process.getProcessName());
+                label.setFont(Font.font("System", FontWeight.BOLD, 13));
+                label.setFill(Color.BLACK);
+                labelMap.put(process.getProcessId(), label);
+                graphPane.getChildren().add(label);
+            }
+        }
+    }
+
+    private void createBusinessProcessEdges(List<BusinessProcessComponent> processes) {
+        // Connect processes sequentially for visualization
+        for (int i = 0; i < processes.size() - 1; i++) {
+            BusinessProcessComponent a = processes.get(i);
+            BusinessProcessComponent b = processes.get(i + 1);
+            Shape sourceNode = nodeMap.get(a.getProcessId());
+            Shape targetNode = nodeMap.get(b.getProcessId());
+            if (sourceNode != null && targetNode != null) {
+                Path edge = createCurvedEdge(sourceNode, targetNode, "PROCESS_FLOW");
+                edges.add(edge);
+                graphPane.getChildren().add(edge);
+                Polygon arrowhead = createArrowhead(edge);
+                arrowheads.add(arrowhead);
+                graphPane.getChildren().add(arrowhead);
+            }
+        }
+    }
+
+    private void applyBusinessProcessLayout(List<BusinessProcessComponent> processes) {
+        // Simple vertical layout
+        double startX = 200;
+        double startY = 100;
+        double spacingY = 200;
+
+        for (int i = 0; i < processes.size(); i++) {
+            BusinessProcessComponent process = processes.get(i);
+            Shape node = nodeMap.get(process.getProcessId());
+
+            if (node instanceof Rectangle) {
+                double x = startX;
+                double y = startY + (i * spacingY);
+                ((Rectangle) node).setX(x);
+                ((Rectangle) node).setY(y);
+
+                // Label position
+                Text label = labelMap.get(process.getProcessId());
+                if (label != null) {
+                    double textWidth = label.getLayoutBounds().getWidth();
+                    label.setX(x + NODE_WIDTH / 2 - textWidth / 2);
+                    label.setY(y + NODE_HEIGHT + 18);
+                }
+            }
+        }
+    }
+
+    // 4. FEATURE GROUP METHODS (Simplified implementations)
+    private List<FeatureGroup> groupComponentsByFeature(ProjectAnalysisResult result) {
+        List<FeatureGroup> groups = new ArrayList<>();
+
+        // Create sample feature groups
+        FeatureGroup authFeature = new FeatureGroup();
+        authFeature.setGroupId("auth_feature");
+        authFeature.setFeatureName("Authentication");
+        groups.add(authFeature);
+
+        return groups;
+    }
+
+    private void createFeatureGroupNodes(List<FeatureGroup> groups) {
+        for (FeatureGroup group : groups) {
+            Rectangle node = new Rectangle(NODE_WIDTH + 50, NODE_HEIGHT + 50);
+            node.setFill(Color.web("#8b5cf6")); // Purple for feature groups
+            node.setArcWidth(20);
+            node.setArcHeight(20);
+
+            nodeMap.put(group.getGroupId(), node);
+            graphPane.getChildren().add(node);
+
+            // Label
+            if (showLabels) {
+                String name = group.getFeatureName() != null ? group.getFeatureName() : group.getGroupId();
+                Text label = new Text(name);
+                label.setFont(Font.font("System", FontWeight.BOLD, 13));
+                label.setFill(Color.BLACK);
+                labelMap.put(group.getGroupId(), label);
+                graphPane.getChildren().add(label);
+            }
+        }
+    }
+
+    private void createFeatureGroupEdges(List<FeatureGroup> groups) {
+        // Connect groups sequentially to visualize relationships
+        for (int i = 0; i < groups.size() - 1; i++) {
+            FeatureGroup a = groups.get(i);
+            FeatureGroup b = groups.get(i + 1);
+            Shape sourceNode = nodeMap.get(a.getGroupId());
+            Shape targetNode = nodeMap.get(b.getGroupId());
+            if (sourceNode != null && targetNode != null) {
+                Path edge = createCurvedEdge(sourceNode, targetNode, "FEATURE_LINK");
+                edges.add(edge);
+                graphPane.getChildren().add(edge);
+                Polygon arrowhead = createArrowhead(edge);
+                arrowheads.add(arrowhead);
+                graphPane.getChildren().add(arrowhead);
+            }
+        }
+    }
+
+    private void applyFeatureGroupLayout(List<FeatureGroup> groups) {
+        // Simple grid layout
+        int cols = 3;
+        double startX = 150;
+        double startY = 150;
+        double spacingX = 300;
+        double spacingY = 250;
+
+        for (int i = 0; i < groups.size(); i++) {
+            FeatureGroup group = groups.get(i);
+            Shape node = nodeMap.get(group.getGroupId());
+
+            if (node instanceof Rectangle) {
+                int row = i / cols;
+                int col = i % cols;
+                double x = startX + (col * spacingX);
+                double y = startY + (row * spacingY);
+                ((Rectangle) node).setX(x);
+                ((Rectangle) node).setY(y);
+
+                // Label position
+                Text label = labelMap.get(group.getGroupId());
+                if (label != null) {
+                    double nodeWidth = NODE_WIDTH + 50;
+                    double textWidth = label.getLayoutBounds().getWidth();
+                    label.setX(x + nodeWidth / 2 - textWidth / 2);
+                    label.setY(y + (NODE_HEIGHT + 50) + 18);
+                }
+            }
+        }
+    }
+
+    // 5. INTEGRATION MAP METHOD (Simplified)
+    private ScrollPane createIntegrationMapView(ProjectAnalysisResult result) {
+        // Ensure canvas is properly sized and optional grid is shown
+        calculateDynamicCanvasSize(result);
+        if (showGrid) {
+            createBackgroundGrid();
+        }
+        // Fallback to technical architecture view for now
+        return createTechnicalArchitectureView(result);
+    }
+
+    // 6. DIALOG AND CONTEXT METHODS
+    private void showFlowDetailsDialog(UserFlowComponent flow) {
+        // Simple console output for now
+        System.out.println("Flow Details: " + flow.getScreenName());
+        System.out.println("Business Goal: " +
+                (flow.getBusinessContext() != null ? flow.getBusinessContext().getBusinessGoal() : "Unknown"));
+    }
+
+    private void displayFlowContext(UserFlowComponent flow) {
+        // Simple console output for now
+        System.out.println("Flow Context: " + flow.getScreenName());
+    }
+
+    // 7. UTILITY METHOD
+    private String extractTargetFromMethodName(String methodName) {
+        // Simple extraction - remove common prefixes
+        return methodName.replace("onclick", "").replace("ontouch", "").replace("on", "");
+    }
+
+    private void createNavigationFlowEdges(List<UserFlowComponent> userFlows) {
+        for (UserFlowComponent flow : userFlows) {
+            if (flow.getOutgoingPaths() != null) {
+                for (NavigationPath path : flow.getOutgoingPaths()) {
+                    NavigationFlow navFlow = path.getNavigationFlow();
+                    if (navFlow != null) {
+                        Shape sourceNode = nodeMap.get(navFlow.getSourceScreenId());
+                        Shape targetNode = nodeMap.get(navFlow.getTargetScreenId());
+
+                        if (sourceNode != null && targetNode != null) {
+                            Path edge = createCurvedEdge(sourceNode, targetNode, "NAVIGATION");
+                            edges.add(edge);
+                            graphPane.getChildren().add(edge);
+
+                            Polygon arrowhead = createArrowhead(edge);
+                            arrowheads.add(arrowhead);
+                            graphPane.getChildren().add(arrowhead);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void addNavigationFlowConnections(ProjectAnalysisResult result, List<NavigationFlow> navigationFlows) {
+        // Handle navigation flow connections separately
+        for (NavigationFlow navFlow : navigationFlows) {
+            // Don't add these to ComponentRelationship list
+            // Handle them separately in the user journey view
+        }
+    }
+
+    private void addIntelligentConnections(ProjectAnalysisResult result) {
+        Set<String> entryPoints = findEntryPoints(result);
+        Set<String> exitPoints = findExitPoints(result);
+
+        // Connect start to entry points - ONLY ComponentRelationship
+        for (String entryId : entryPoints) {
+            ComponentRelationship rel = new ComponentRelationship();
+            rel.setSourceId(START_NODE_ID);
+            rel.setTargetId(entryId);
+            rel.setType("STARTS");
+            result.addRelationship(rel);  // This expects ComponentRelationship
+        }
+
+        // Connect exit points to end - ONLY ComponentRelationship
+        for (String exitId : exitPoints) {
+            ComponentRelationship rel = new ComponentRelationship();
+            rel.setSourceId(exitId);
+            rel.setTargetId(END_NODE_ID);
+            rel.setType("TERMINATES");
+            result.addRelationship(rel);  // This expects ComponentRelationship
+        }
+    }
+
+    // Adds a simple legend panel for the User Journey view to improve readability for new readers
+    private void addUserJourneyLegend() {
+        try {
+            VBox legend = LegendFactory.createUserJourneyLegend(
+                    Color.web("#10b981"), // Entry
+                    Color.web("#3b82f6"), // Main
+                    Color.web("#f59e0b"), // Decision
+                    Color.web("#ef4444")  // Exit
+            );
+            legend.setMouseTransparent(true);
+            legend.setPickOnBounds(false);
+            this.lastLegend = legend;
+        } catch (Exception ignored) {
+        }
+    }
+
+    // Adds a legend for the Technical Architecture view mapping node colors to layers
+    private void addTechnicalArchitectureLegend() {
+        try {
+            VBox legend = LegendFactory.createTechnicalArchitectureLegend(UI_COLOR, BUSINESS_COLOR, DATA_COLOR, OTHER_COLOR);
+            legend.setMouseTransparent(true);
+            legend.setPickOnBounds(false);
+            this.lastLegend = legend;
+        } catch (Exception ignored) {
+        }
+    }
+
+    // Adds a legend for the Business Process view
+    private void addBusinessProcessLegend() {
+        try {
+            VBox legend = LegendFactory.createBusinessProcessLegend(WARNING, INFO);
+            legend.setMouseTransparent(true);
+            legend.setPickOnBounds(false);
+            this.lastLegend = legend;
+        } catch (Exception ignored) {
+        }
+    }
+
+    // Adds a legend for the Feature Overview view
+    private void addFeatureOverviewLegend() {
+        try {
+            VBox legend = LegendFactory.createFeatureOverviewLegend(PURPLE, INFO);
+            legend.setMouseTransparent(true);
+            legend.setPickOnBounds(false);
+            this.lastLegend = legend;
+        } catch (Exception ignored) {
+        }
+    }
+
+    public VBox getLegend() {
+        return lastLegend;
     }
 }

@@ -11,6 +11,7 @@ import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.CodeField;
 import com.projectvisualizer.models.CodeMethod;
+import com.projectvisualizer.models.NavigationFlow;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -20,7 +21,9 @@ import java.util.Map;
 
 public class JavaFileParser {
 
-    private Map<String, String> activityLayoutMap; // For resource mapping
+    private Map<String, String> activityLayoutMap;
+    private IntentAnalyzer intentAnalyzer = new IntentAnalyzer();
+    private ScreenFlowDetector screenFlowDetector = new ScreenFlowDetector();
 
     public JavaFileParser() {
         // Default constructor
@@ -32,6 +35,7 @@ public class JavaFileParser {
 
     public List<CodeComponent> parse(File javaFile) throws Exception {
         List<CodeComponent> components = new ArrayList<>();
+        List<NavigationFlow> intentFlows = intentAnalyzer.analyzeIntentFlows(javaFile);
 
         try (FileInputStream in = new FileInputStream(javaFile)) {
             CompilationUnit cu = StaticJavaParser.parse(in);

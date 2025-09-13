@@ -17,8 +17,11 @@ public class Main extends Application {
                 getClass().getResource("/fxml/main.fxml")));
 
         primaryStage.setTitle("CodeCartographer - Project Architecture Visualizer");
-        primaryStage.getIcons().add(new Image(
-                Objects.requireNonNull(getClass().getResourceAsStream(""))));
+        // Try to load an application icon if available
+        java.net.URL iconUrl = getClass().getResource("/icon.png");
+        if (iconUrl != null) {
+            primaryStage.getIcons().add(new Image(iconUrl.toString()));
+        }
 
         primaryStage.setScene(new Scene(root, 1200, 800));
         primaryStage.setMinWidth(800);

@@ -71,39 +71,53 @@ public class KotlinParser {
     }
 
     private void findKotlinInjections(String content, CodeComponent component) {
-        // Pattern for field injection with annotations like @Inject, @Autowired
-        Pattern injectionPattern = Pattern.compile("@(Inject|Autowired|Resource)\\s+[^\\n]*\\s+(var|val)\\s+(\\w+)\\s*:\\s*(\\w+)");
-        Matcher injectionMatcher = injectionPattern.matcher(content);
-
-        while (injectionMatcher.find()) {
-            String dependencyType = injectionMatcher.group(4);
+        // 1) Field/property injection with annotations like @Inject, @Autowired
+        Pattern fieldAnnPattern = Pattern.compile("@(Inject|Autowired|Resource)\\s+.*?\\b(val|var)\\s+(\\w+)\\s*:\\s*([\\w\\.<>?]+)");
+        Matcher fieldAnnMatcher = fieldAnnPattern.matcher(content);
+        while (fieldAnnMatcher.find()) {
+            String dependencyType = fieldAnnMatcher.group(4);
             component.getInjectedDependencies().add(dependencyType);
         }
 
-        // Pattern for constructor injection
-        Pattern constructorPattern = Pattern.compile("constructor\\s*\\([^)]*\\)");
-        Matcher constructorMatcher = constructorPattern.matcher(content);
-
-        if (constructorMatcher.find()) {
-            String constructorParams = constructorMatcher.group(0);
-
-            // Look for injected parameters in constructor
-            Pattern paramPattern = Pattern.compile("@(Inject|Autowired|Resource)\\s+[^,)]*\\s+(\\w+)\\s*:\\s*(\\w+)");
-            Matcher paramMatcher = paramPattern.matcher(constructorParams);
-
-            while (paramMatcher.find()) {
-                String dependencyType = paramMatcher.group(3);
-                component.getInjectedDependencies().add(dependencyType);
+        // 2) Primary/secondary constructor parameter injection with @Inject
+        // Pattern A: class Foo @Inject constructor(dep: Type, ...)
+        Pattern injectCtorAfterClass = Pattern.compile("class\\s+\\w+\\s+@Inject\\s+constructor\\s*\\(([^)]*)\\)");
+        Matcher injectCtorAfterClassMatcher = injectCtorAfterClass.matcher(content);
+        while (injectCtorAfterClassMatcher.find()) {
+            String params = injectCtorAfterClassMatcher.group(1);
+            Matcher typeMatcher = Pattern.compile("(val|var)?\\s*\\w+\\s*:\\s*([\\w\\.<>?]+)").matcher(params);
+            while (typeMatcher.find()) {
+                component.getInjectedDependencies().add(typeMatcher.group(2));
+            }
+        }
+        // Pattern B: @Inject constructor(dep: Type)
+        Pattern injectCtorPattern = Pattern.compile("@Inject\\s+constructor\\s*\\(([^)]*)\\)");
+        Matcher injectCtorMatcher = injectCtorPattern.matcher(content);
+        while (injectCtorMatcher.find()) {
+            String params = injectCtorMatcher.group(1);
+            Matcher typeMatcher = Pattern.compile("(val|var)?\\s*\\w+\\s*:\\s*([\\w\\.<>?]+)").matcher(params);
+            while (typeMatcher.find()) {
+                component.getInjectedDependencies().add(typeMatcher.group(2));
             }
         }
 
-        // Pattern for Koin's by inject() and get()
-        Pattern koinPattern = Pattern.compile("(by\\s+inject\\(\\)|get\\(\\))\\s*:\\s*(\\w+)");
-        Matcher koinMatcher = koinPattern.matcher(content);
-
-        while (koinMatcher.find()) {
-            String dependencyType = koinMatcher.group(2);
-            component.getInjectedDependencies().add(dependencyType);
+        // 3) Koin: `val repo: Repo by inject()`
+        Pattern koinByInject = Pattern.compile("\\b(val|var)\\s+\\w+\\s*:\\s*([\\w\\.<>?]+)\\s+by\\s+inject\\s*\\(");
+        Matcher koinByInjectMatcher = koinByInject.matcher(content);
+        while (koinByInjectMatcher.find()) {
+            component.getInjectedDependencies().add(koinByInjectMatcher.group(2));
+        }
+        // 3b) Koin get<T>()
+        Pattern koinGetGeneric = Pattern.compile("\\bget\\s*<\\s*([\\w\\.<>?]+)\\s*>\\s*\\(");
+        Matcher koinGetGenericMatcher = koinGetGeneric.matcher(content);
+        while (koinGetGenericMatcher.find()) {
+            component.getInjectedDependencies().add(koinGetGenericMatcher.group(1));
+        }
+        // 3c) Koin get() with explicit type on LHS: `val repo: Repo = get()`
+        Pattern koinGetAssigned = Pattern.compile("\\b(val|var)\\s+\\w+\\s*:\\s*([\\w\\.<>?]+)\\s*=\\s*get\\s*\\(");
+        Matcher koinGetAssignedMatcher = koinGetAssigned.matcher(content);
+        while (koinGetAssignedMatcher.find()) {
+            component.getInjectedDependencies().add(koinGetAssignedMatcher.group(2));
         }
     }
 }

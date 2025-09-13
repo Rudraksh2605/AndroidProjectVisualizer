@@ -88,6 +88,10 @@
                       onAction="#handleCircularLayout"/>
             <MenuItem text="Force-Directed Layout" mnemonicParsing="false"
                       onAction="#handleForceDirectedLayout"/>
+            <MenuItem text="Grid Layout" mnemonicParsing="false"
+                      onAction="#handleGridLayout"/>
+            <MenuItem text="Layered Layout" mnemonicParsing="false"
+                      onAction="#handleLayeredLayout"/>
         </Menu>
 
         <Menu text="Help" mnemonicParsing="false">
@@ -106,7 +110,7 @@
     </MenuBar>
 
     <!-- Enhanced Main Content Area -->
-    <SplitPane dividerPositions="0.25, 0.75" VBox.vgrow="ALWAYS" styleClass="main-split-pane">
+    <SplitPane dividerPositions="0.25" VBox.vgrow="ALWAYS" styleClass="main-split-pane">
 
         <!-- Left Sidebar Panel -->
         <VBox spacing="0" styleClass="sidebar-panel">
@@ -182,6 +186,20 @@
                               value="Hierarchical"
                               styleClass="toolbar-combo"
                               onAction="#handleLayoutChange">
+                    </ComboBox>
+                </VBox>
+
+                <Separator orientation="VERTICAL"/>
+
+                <!-- FIXED: Added Missing Visualization Mode Controls -->
+                <VBox spacing="4">
+                    <Label text="Mode:" styleClass="toolbar-label"/>
+                    <ComboBox fx:id="visualizationModeComboBox"
+                              value="Technical Architecture"
+                              styleClass="toolbar-combo">
+                        <tooltip>
+                            <Tooltip text="Select visualization mode"/>
+                        </tooltip>
                     </ComboBox>
                 </VBox>
 
@@ -271,6 +289,16 @@
                                 <Insets bottom="16" right="16"/>
                             </StackPane.margin>
                         </ScrollPane>
+
+                        <!-- Fixed overlay for legends -->
+                        <Pane fx:id="legendOverlayPane"
+                              mouseTransparent="true"
+                              pickOnBounds="false"
+                              StackPane.alignment="TOP_RIGHT">
+                            <StackPane.margin>
+                                <Insets top="16" right="16"/>
+                            </StackPane.margin>
+                        </Pane>
                     </StackPane>
                 </Tab>
 
@@ -358,60 +386,6 @@
             </TabPane>
         </VBox>
 
-        <!-- Right Properties Panel -->
-        <VBox spacing="0" styleClass="properties-panel">
-            <!-- Component Details Section -->
-            <VBox spacing="0" styleClass="sidebar-section">
-                <HBox styleClass="panel-header" alignment="CENTER_LEFT">
-                    <Label text="Component Details" styleClass="panel-title"/>
-                    <Region HBox.hgrow="ALWAYS"/>
-                    <Button text="📌" styleClass="icon-button">
-                        <tooltip>
-                            <Tooltip text="Pin Details Panel"/>
-                        </tooltip>
-                    </Button>
-                </HBox>
-
-                <ScrollPane VBox.vgrow="ALWAYS"
-                            fitToWidth="true"
-                            styleClass="details-scroll">
-                    <VBox fx:id="componentDetailsContainer"
-                          spacing="12"
-                          styleClass="details-container">
-                        <Label text="Select a component to view details"
-                               styleClass="placeholder-text"/>
-                    </VBox>
-                </ScrollPane>
-            </VBox>
-
-            <!-- Quick Actions Section -->
-            <VBox spacing="8" styleClass="sidebar-section actions-section">
-                <Label text="Quick Actions" styleClass="section-title"/>
-
-                <VBox spacing="6">
-                    <Button text="Navigate to Source"
-                            styleClass="action-button-small secondary"
-                            disable="true"
-                            maxWidth="Infinity"
-                            onAction="#handleNavigateToSource"/>
-                    <Button text="Show Dependencies"
-                            styleClass="action-button-small secondary"
-                            disable="true"
-                            maxWidth="Infinity"
-                            onAction="#handleShowComponentDependencies"/>
-                    <Button text="Find References"
-                            styleClass="action-button-small secondary"
-                            disable="true"
-                            maxWidth="Infinity"
-                            onAction="#handleFindReferences"/>
-                    <Button text="Generate Documentation"
-                            styleClass="action-button-small"
-                            disable="true"
-                            maxWidth="Infinity"
-                            onAction="#handleGenerateDocumentation"/>
-                </VBox>
-            </VBox>
-        </VBox>
     </SplitPane>
 
     <!-- Enhanced Status Bar -->

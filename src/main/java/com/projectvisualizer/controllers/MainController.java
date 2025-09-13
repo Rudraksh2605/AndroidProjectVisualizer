@@ -54,9 +54,11 @@ public class MainController {
     @FXML private VBox dependenciesContainer;
     @FXML private VBox statisticsContainer;
     @FXML private VBox metricsContainer;
-    @FXML private VBox componentDetailsContainer;
     @FXML private ScrollPane diagramScrollPane;
     @FXML private ScrollPane minimapScrollPane;
+    @FXML private ComboBox<String> visualizationModeComboBox;
+    @FXML private Pane legendOverlayPane;
+
 
     private ProjectAnalysisResult currentAnalysisResult;
     private ProjectAnalyzer projectAnalyzer;
@@ -76,9 +78,26 @@ public class MainController {
         setupComboBoxes();
         setupCheckBoxes();
 
+        visualizationModeComboBox.getItems().addAll(
+                "Technical Architecture", "User Journey", "Business Process",
+                "Feature Overview", "Integration Map"
+        );
+        visualizationModeComboBox.setValue("Technical Architecture"); // Default to technical view
+
+        visualizationModeComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateVisualizationMode(newVal);
+        });
+
         // Set up memory monitoring
         setupMemoryMonitoring();
     }
+
+    private void updateVisualizationMode(String mode) {
+        GraphVisualizer.VisualizationMode vizMode = mapStringToVisualizationMode(mode);
+        graphVisualizer.setVisualizationMode(vizMode);
+        refreshGraph();
+    }
+
 
     private void setupComboBoxes() {
         // Setup layer filter
@@ -121,7 +140,24 @@ public class MainController {
 
             // Refresh the diagram
             ScrollPane diagram = graphVisualizer.createGraphView(currentAnalysisResult);
-            diagramScrollPane.setContent(diagram);
+            // Avoid nesting scroll panes; use the diagram content (shared canvas)
+            diagramScrollPane.setContent(diagram.getContent());
+
+            // Place legend into fixed overlay so it doesn't scroll
+            if (legendOverlayPane != null) {
+                legendOverlayPane.getChildren().clear();
+                javafx.scene.layout.Region legend = graphVisualizer.getLegend();
+                if (legend != null) {
+                    legendOverlayPane.getChildren().add(legend);
+                }
+            }
+
+            // Auto-fit by default after content is laid out
+            javafx.application.Platform.runLater(() -> {
+                graphVisualizer.fitToWindow(diagramScrollPane);
+                currentZoomLevel = graphVisualizer.getCurrentZoom();
+                updateZoom();
+            });
         }
     }
 
@@ -229,7 +265,13 @@ public class MainController {
     }
     @FXML
     private void handleFitToWindow() {
-        showInfoDialog("Fit to Window", "Fit to window functionality", "Fit to window feature will be implemented in future versions.");
+        if (diagramScrollPane != null && graphVisualizer != null) {
+            javafx.application.Platform.runLater(() -> {
+                graphVisualizer.fitToWindow(diagramScrollPane);
+                currentZoomLevel = graphVisualizer.getCurrentZoom();
+                updateZoom();
+            });
+        }
     }
 
     @FXML
@@ -459,13 +501,65 @@ public class MainController {
 
         // Update diagram
         ScrollPane diagram = graphVisualizer.createGraphView(result);
-        diagramScrollPane.setContent(diagram);
+        // Avoid nesting scroll panes; use the diagram content (shared canvas)
+        diagramScrollPane.setContent(diagram.getContent());
     }
 
     private void updateDependenciesView(ProjectAnalysisResult result) {
         dependenciesContainer.getChildren().clear();
 
-        // Gradle Dependencies
+        // Section: Dependency Injection Usages
+        VBox diSection = new VBox(6);
+        Label diTitle = new Label("Dependency Injection Usages");
+        diTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 16;");
+
+        // Build map: dependency type -> list of classes where injected
+        java.util.Map<String, java.util.List<String>> diMap = new java.util.HashMap<>();
+        result.getComponents().forEach(component -> {
+            if (component.getInjectedDependencies() != null) {
+                for (String depType : component.getInjectedDependencies()) {
+                    if (depType == null || depType.trim().isEmpty()) continue;
+                    String key = depType.trim();
+                    diMap.computeIfAbsent(key, k -> new java.util.ArrayList<>());
+                    String className = component.getId() != null ? component.getId() : component.getName();
+                    if (className != null && !diMap.get(key).contains(className)) {
+                        diMap.get(key).add(className);
+                    }
+                }
+            }
+        });
+
+        if (diMap.isEmpty()) {
+            Label none = new Label("No injected dependencies detected.");
+            none.setTextFill(Color.GRAY);
+            diSection.getChildren().add(none);
+        } else {
+            // Sort dependencies by name
+            java.util.List<String> deps = new java.util.ArrayList<>(diMap.keySet());
+            java.util.Collections.sort(deps, String.CASE_INSENSITIVE_ORDER);
+
+            for (String dep : deps) {
+                java.util.List<String> usages = diMap.get(dep);
+                // Sort usages
+                java.util.Collections.sort(usages, String.CASE_INSENSITIVE_ORDER);
+
+                TitledPane pane = new TitledPane();
+                pane.setText(dep + "  (" + usages.size() + ")");
+                VBox content = new VBox(2);
+                for (String cls : usages) {
+                    Label lbl = new Label("• " + cls);
+                    lbl.setStyle("-fx-text-fill: #374151;");
+                    content.getChildren().add(lbl);
+                }
+                pane.setContent(content);
+                pane.setExpanded(false);
+                diSection.getChildren().add(pane);
+            }
+        }
+
+        dependenciesContainer.getChildren().addAll(diTitle, diSection);
+
+        // Section: Gradle Dependencies (existing)
         if (!result.getGradleDependencies().isEmpty()) {
             Label gradleLabel = new Label("Gradle Dependencies:");
             gradleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14;");
@@ -482,8 +576,6 @@ public class MainController {
 
             dependenciesContainer.getChildren().addAll(gradleLabel, gradleBox);
         }
-
-        // Add other dependency types similarly...
     }
 
     private void updateStatisticsView(ProjectAnalysisResult result) {
@@ -572,5 +664,21 @@ public class MainController {
     @FXML
     private void handleLayeredLayout() {
         layoutComboBox.setValue("Layered");
+    }
+
+    private GraphVisualizer.VisualizationMode mapStringToVisualizationMode(String mode) {
+        switch (mode) {
+            case "User Journey":
+                return GraphVisualizer.VisualizationMode.USER_JOURNEY;
+            case "Business Process":
+                return GraphVisualizer.VisualizationMode.BUSINESS_PROCESS;
+            case "Feature Overview":
+                return GraphVisualizer.VisualizationMode.FEATURE_OVERVIEW;
+            case "Integration Map":
+                return GraphVisualizer.VisualizationMode.INTEGRATION_MAP;
+            case "Technical Architecture":
+            default:
+                return GraphVisualizer.VisualizationMode.TECHNICAL_ARCHITECTURE;
+        }
     }
 }

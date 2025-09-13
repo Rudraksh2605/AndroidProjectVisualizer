@@ -1,8 +1,8 @@
 package com.projectvisualizer.services;
 
-import com.projectvisualizer.models.CodeComponent;
-import com.projectvisualizer.models.ComponentRelationship;
-import com.projectvisualizer.models.ProjectAnalysisResult;
+import com.projectvisualizer.models.*;
+import com.projectvisualizer.parsers.BusinessProcessExtractor;
+import com.projectvisualizer.parsers.ScreenFlowDetector;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,18 +14,38 @@ public class RelationshipBuilder {
     // Special node IDs (should match those in GraphVisualizer)
     private static final String START_NODE_ID = "_START_NODE_";
     private static final String END_NODE_ID = "_END_NODE_";
+    private ScreenFlowDetector flowDetector = new ScreenFlowDetector();
+    private BusinessProcessExtractor processMapper = new BusinessProcessExtractor();
+
+
 
     public void buildRelationships(ProjectAnalysisResult result) {
         List<ComponentRelationship> relationships = new ArrayList<>();
 
-        // Build regular component relationships
+        // Build regular component relationships FIRST
         buildRegularRelationships(result, relationships);
 
-        // Add Start and End node relationships if they don't already exist
+        // Add Start and End node relationships
         enhanceWithStartEndRelationships(result, relationships);
 
+        // Set component relationships (this must be done before other methods use them)
         result.setRelationships(relationships);
+
+        // Build navigation flows FIRST (needed for user flows)
+        List<NavigationFlow> navigationFlows = buildNavigationFlows(result);
+        result.setNavigationFlows(navigationFlows);
+
+        // FIXED: Pass NavigationFlow list instead of ComponentRelationship list
+        List<UserFlowComponent> userFlows = flowDetector.detectUserFlows(
+                result.getComponents(), navigationFlows);
+        result.setUserFlows(userFlows);
+
+        // Build business processes
+        List<BusinessProcessComponent> processes = processMapper.extractBusinessProcesses(userFlows);
+        result.setBusinessProcesses(processes);
     }
+
+
 
     private void buildRegularRelationships(ProjectAnalysisResult result, List<ComponentRelationship> relationships) {
         for (CodeComponent component : result.getComponents()) {
@@ -339,4 +359,191 @@ public class RelationshipBuilder {
         // Return the name as ID if not found (for external dependencies)
         return name;
     }
+
+    private boolean isUIComponent(CodeComponent component) {
+        if (component == null) return false;
+
+        String name = component.getName() != null ? component.getName().toLowerCase() : "";
+        String type = component.getType() != null ? component.getType().toLowerCase() : "";
+        String extendsClass = component.getExtendsClass() != null ? component.getExtendsClass().toLowerCase() : "";
+
+        return name.contains("activity") || name.contains("fragment") || name.contains("dialog") ||
+                type.contains("activity") || type.contains("fragment") || type.contains("dialog") ||
+                extendsClass.contains("activity") || extendsClass.contains("fragment");
+    }
+
+
+    // NEW: Method specifically for component relationships (not navigation flows)
+    public void buildComponentRelationships(ProjectAnalysisResult result) {
+        List<ComponentRelationship> relationships = new ArrayList<>();
+
+        for (CodeComponent component : result.getComponents()) {
+            // Skip special nodes
+            if (isSpecialNode(component)) {
+                continue;
+            }
+
+            // Handle extends relationship
+            if (component.getExtendsClass() != null && !component.getExtendsClass().isEmpty()) {
+                String targetId = findComponentIdByName(result, component.getExtendsClass());
+                if (targetId != null) {
+                    ComponentRelationship extendsRel = new ComponentRelationship();
+                    extendsRel.setSourceId(component.getId());
+                    extendsRel.setTargetId(targetId);
+                    extendsRel.setType("EXTENDS");
+                    relationships.add(extendsRel);
+                }
+            }
+
+            // Handle implements relationships
+            for (String interfaceName : component.getImplementsList()) {
+                String targetId = findComponentIdByName(result, interfaceName);
+                if (targetId != null) {
+                    ComponentRelationship implementsRel = new ComponentRelationship();
+                    implementsRel.setSourceId(component.getId());
+                    implementsRel.setTargetId(targetId);
+                    implementsRel.setType("IMPLEMENTS");
+                    relationships.add(implementsRel);
+                }
+            }
+
+            // Handle field dependencies
+            for (CodeComponent dependency : component.getDependencies()) {
+                if (!isSpecialNode(dependency)) {
+                    ComponentRelationship dependsRel = new ComponentRelationship();
+                    dependsRel.setSourceId(component.getId());
+                    dependsRel.setTargetId(dependency.getId());
+                    dependsRel.setType("DEPENDS_ON");
+                    relationships.add(dependsRel);
+                }
+            }
+        }
+
+        // Set ONLY ComponentRelationship objects
+        result.setRelationships(relationships);
+    }
+
+    public List<NavigationFlow> buildNavigationFlows(ProjectAnalysisResult result) {
+        List<NavigationFlow> navigationFlows = new ArrayList<>();
+
+        // First, add navigation flows from explicit navigation destinations
+        for (CodeComponent component : result.getComponents()) {
+            if (isUIComponent(component) && component.getNavigationDestinations() != null) {
+                for (NavigationDestination dest : component.getNavigationDestinations()) {
+                    NavigationFlow navFlow = new NavigationFlow();
+                    navFlow.setFlowId(component.getId() + "_to_" + dest.getDestinationId());
+                    navFlow.setSourceScreenId(component.getId());
+                    navFlow.setTargetScreenId(dest.getDestinationId());
+                    navFlow.setNavigationType(NavigationFlow.NavigationType.FORWARD);
+                    navigationFlows.add(navFlow);
+                }
+            }
+        }
+
+        // FIXED: Create navigation flows from UI-to-UI component relationships
+        for (CodeComponent component : result.getComponents()) {
+            if (isUIComponent(component)) {
+                for (ComponentRelationship rel : result.getRelationships()) {
+                    if (rel.getSourceId().equals(component.getId())) {
+                        CodeComponent targetComponent = result.findComponentById(rel.getTargetId());
+                        if (targetComponent != null && isUIComponent(targetComponent)) {
+                            NavigationFlow navFlow = new NavigationFlow();
+                            navFlow.setFlowId(rel.getSourceId() + "_to_" + rel.getTargetId());
+                            navFlow.setSourceScreenId(rel.getSourceId());
+                            navFlow.setTargetScreenId(rel.getTargetId());
+                            navFlow.setNavigationType(NavigationFlow.NavigationType.FORWARD);
+                            navigationFlows.add(navFlow);
+                        }
+                    }
+                }
+            }
+        }
+
+        return navigationFlows;
+    }
+
+    // For use within RelationshipBuilder when you have ComponentRelationship
+    private List<UserFlowComponent> detectUserFlowsFromRelationships(List<CodeComponent> components,
+                                                                     List<ComponentRelationship> relationships) {
+        List<UserFlowComponent> userFlows = new ArrayList<>();
+
+        for (CodeComponent component : components) {
+            if (isUIComponent(component)) {
+                UserFlowComponent userFlow = new UserFlowComponent();
+                userFlow.setId(component.getId());
+                userFlow.setScreenName(component.getName());
+                userFlow.setActivityName(component.getName());
+                userFlow.setFlowType(UserFlowComponent.FlowType.MAIN_FLOW);
+
+                List<NavigationPath> paths = new ArrayList<>();
+
+                for (ComponentRelationship rel : relationships) {
+                    if (rel.getSourceId().equals(component.getId())) {
+                        CodeComponent targetComponent = null;
+                        for (CodeComponent comp : components) {
+                            if (comp.getId().equals(rel.getTargetId())) {
+                                targetComponent = comp;
+                                break;
+                            }
+                        }
+
+                        if (targetComponent != null && isUIComponent(targetComponent)) {
+                            NavigationFlow navFlow = new NavigationFlow();
+                            navFlow.setFlowId(rel.getSourceId() + "_to_" + rel.getTargetId());
+                            navFlow.setSourceScreenId(rel.getSourceId());
+                            navFlow.setTargetScreenId(rel.getTargetId());
+                            navFlow.setNavigationType(NavigationFlow.NavigationType.FORWARD);
+
+                            NavigationPath path = new NavigationPath(navFlow);
+                            paths.add(path);
+                        }
+                    }
+                }
+
+                userFlow.setOutgoingPaths(paths);
+                userFlows.add(userFlow);
+            }
+        }
+
+        return userFlows;
+    }
+
+    // For use by ScreenFlowDetector when you have NavigationFlow (updated signature)
+    public List<UserFlowComponent> detectUserFlows(List<CodeComponent> components,
+                                                   List<NavigationFlow> navigationFlows) {
+        List<UserFlowComponent> userFlows = new ArrayList<>();
+
+        for (CodeComponent component : components) {
+            if (isUIComponent(component)) {
+                UserFlowComponent userFlow = new UserFlowComponent();
+                userFlow.setId(component.getId());
+                userFlow.setScreenName(component.getName());
+                userFlow.setActivityName(component.getName());
+                userFlow.setFlowType(UserFlowComponent.FlowType.MAIN_FLOW);
+
+                List<NavigationPath> paths = new ArrayList<>();
+
+                for (NavigationFlow navFlow : navigationFlows) {
+                    if (navFlow.getSourceScreenId().equals(component.getId())) {
+                        NavigationPath path = new NavigationPath(navFlow);
+                        paths.add(path);
+                    }
+                }
+
+                userFlow.setOutgoingPaths(paths);
+                userFlows.add(userFlow);
+            }
+        }
+
+        return userFlows;
+    }
+
+
+
+
+
+
+
+
 }
+

@@ -6,10 +6,14 @@
   <component name="ChangeListManager">
     <list default="true" id="96e75262-d0be-4199-aeba-7ace1778131c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/Main.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/ProjectAnalysisResult.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/ProjectAnalysisResult.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/RelationshipBuilder.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/RelationshipBuilder.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphVisualizer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphVisualizer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/resources/styles/styles.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/styles/styles.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/fxml/main.fxml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/fxml/main.fxml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,6 +54,7 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GradleScriptDefinitionsStorage" workingDir="$PROJECT_DIR$" gradleHome="C:\Users\rudra\.gradle\wrapper\dists\gradle-8.5-bin\5t9huq95ubn472n8rpzujfbqh\gradle-8.5" javaHome="C:\Program Files\Java\jdk-17" gradleVersion="8.5" />
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -57,7 +62,6 @@
   &quot;associatedIndex&quot;: 6
 }</component>
   <component name="ProjectId" id="31usWZirDoxY3bA9yZqsk0LR6r7" />
-  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -65,12 +69,16 @@
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;Gradle.AndroidProjectVisualizer [:Main.main()].executor&quot;: &quot;Run&quot;,
+    &quot;Gradle.AndroidProjectVisualizer [:com.projectvisualizer.Main.main()].executor&quot;: &quot;Run&quot;,
     &quot;Gradle.Build AndroidProjectVisualizer.executor&quot;: &quot;Run&quot;,
     &quot;Gradle.C:/Users/rudra/OneDrive/Desktop/DevStore/New folder/AndroidProjectVisualizer [Main.main()].executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/rudra/Downloads/openjfx-21.0.8_windows-x64_bin-sdk/javafx-sdk-21.0.8/lib/javafx.web.jar&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/rudra/OneDrive/Desktop/DevStore/New folder/AndroidProjectVisualizer&quot;,
     &quot;list.type.of.created.stylesheet&quot;: &quot;CSS&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
@@ -80,7 +88,8 @@
     &quot;project.structure.last.edited&quot;: &quot;Libraries&quot;,
     &quot;project.structure.proportion&quot;: &quot;0.15429688&quot;,
     &quot;project.structure.side.proportion&quot;: &quot;0.0&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.project.gradle&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -123,8 +132,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-jdk-9f38398b9061-39b83d9b5494-intellij.indexing.shared.core-IU-241.18968.26" />
-        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-IU-241.18968.26" />
+        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.25557.131" />
+        <option value="bundled-js-predefined-d6986cc7102b-b598e85cdad2-JavaScript-IU-252.25557.131" />
       </set>
     </attachedChunks>
   </component>
@@ -156,11 +165,42 @@
       <workItem from="1757567820285" duration="711000" />
       <workItem from="1757588286692" duration="4639000" />
       <workItem from="1757595855485" duration="6051000" />
+      <workItem from="1757741542750" duration="314000" />
+      <workItem from="1757742190037" duration="233000" />
+      <workItem from="1757742437950" duration="10000" />
+      <workItem from="1757742456060" duration="1552000" />
+      <workItem from="1757744030258" duration="129000" />
+      <workItem from="1757744701501" duration="1415000" />
+      <workItem from="1757746171039" duration="468000" />
+      <workItem from="1757757152405" duration="34000" />
+      <workItem from="1757758378945" duration="4198000" />
+      <workItem from="1757762623489" duration="3068000" />
+      <workItem from="1757767079952" duration="2252000" />
+      <workItem from="1757769361692" duration="558000" />
+      <workItem from="1757769929952" duration="11000" />
+      <workItem from="1757769947242" duration="13000" />
+      <workItem from="1757770028168" duration="2495000" />
+      <workItem from="1757774099807" duration="1292000" />
+      <workItem from="1757776345534" duration="1073000" />
+      <workItem from="1757777452766" duration="2158000" />
+      <workItem from="1757779640968" duration="5131000" />
+      <workItem from="1757784839237" duration="5000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
