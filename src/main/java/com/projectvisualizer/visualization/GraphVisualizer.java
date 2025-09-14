@@ -17,12 +17,19 @@ import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
 import com.projectvisualizer.visualization.render.EdgeRenderer;
 import com.projectvisualizer.visualization.ui.LegendFactory;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.projectvisualizer.models.*;
 import javafx.scene.control.Label;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 
 public class GraphVisualizer {
     // Constants for node sizing and spacing
@@ -33,6 +40,8 @@ public class GraphVisualizer {
     private static final double LAYER_SPACING = 350;
     private static final double ARROW_SIZE = 14;
     private static final double CURVE_STRENGTH = 100;
+
+    private ProjectAnalysisResult currentResult;
 
     // Color constants
     private static final Color UI_COLOR = Color.web("#3b82f6");
@@ -105,6 +114,7 @@ public class GraphVisualizer {
 
         // Set up the graph pane with modern styling
         graphPane.getStyleClass().add("graph-container");
+        this.currentResult = result;
 
         // NEW: Create multi-mode visualization
         switch (currentMode) {
@@ -492,29 +502,6 @@ public class GraphVisualizer {
             case ERROR_HANDLING: return Color.web("#f97316"); // Orange
             default: return Color.web("#6b7280"); // Gray
         }
-    }
-
-    // NEW: Create enhanced label with business context
-    private VBox createEnhancedUserFlowLabel(UserFlowComponent flow) {
-        VBox container = new VBox(5);
-        container.setAlignment(javafx.geometry.Pos.CENTER);
-
-        // Screen name
-        Text screenLabel = new Text(flow.getScreenName());
-        screenLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
-        screenLabel.setFill(Color.BLACK);
-
-        // Business context
-        if (flow.getBusinessContext() != null) {
-            Text contextLabel = new Text(flow.getBusinessContext().getBusinessGoal());
-            contextLabel.setFont(Font.font("System", FontWeight.NORMAL, 11));
-            contextLabel.setFill(Color.web("#6b7280"));
-            container.getChildren().addAll(screenLabel, contextLabel);
-        } else {
-            container.getChildren().add(screenLabel);
-        }
-
-        return container;
     }
 
     private ScrollPane createBusinessProcessView(ProjectAnalysisResult result) {
@@ -936,6 +923,14 @@ public class GraphVisualizer {
         sb.append("Name: ").append(component.getName()).append("\n");
         sb.append("Type: ").append(component.getType()).append("\n");
         sb.append("Language: ").append(component.getLanguage()).append("\n");
+
+        // In GraphVisualizer.createTooltipText(), add:
+        if (component.getDaggerComponentType() != null) {
+            sb.append("Dagger Component: ").append(component.getDaggerComponentType()).append("\n");
+        }
+        if (component.isHiltComponent()) {
+            sb.append("Hilt Component: ").append(component.getHiltComponentType()).append("\n");
+        }
 
         if (component.getLayer() != null) {
             sb.append("Layer: ").append(component.getLayer()).append("\n");
@@ -2134,14 +2129,6 @@ public class GraphVisualizer {
         }
     }
 
-    private void addNavigationFlowConnections(ProjectAnalysisResult result, List<NavigationFlow> navigationFlows) {
-        // Handle navigation flow connections separately
-        for (NavigationFlow navFlow : navigationFlows) {
-            // Don't add these to ComponentRelationship list
-            // Handle them separately in the user journey view
-        }
-    }
-
     private void addIntelligentConnections(ProjectAnalysisResult result) {
         Set<String> entryPoints = findEntryPoints(result);
         Set<String> exitPoints = findExitPoints(result);
@@ -2216,5 +2203,28 @@ public class GraphVisualizer {
 
     public VBox getLegend() {
         return lastLegend;
+    }
+
+    // Add these methods to GraphVisualizer.java
+    public void exportToPlantUML(File outputFile) {
+        GraphExporter exporter = new GraphExporter();
+        String plantUML = exporter.exportToPlantUML(this.currentResult); // Use stored result
+
+        try (FileWriter writer = new FileWriter(outputFile)) {
+            writer.write(plantUML);
+        } catch (IOException e) {
+            System.err.println("Error exporting to PlantUML: " + e.getMessage());
+        }
+    }
+
+    public void exportToGraphviz(File outputFile) {
+        GraphExporter exporter = new GraphExporter();
+        String dot = exporter.exportToGraphviz(this.currentResult); // Use stored result
+
+        try (FileWriter writer = new FileWriter(outputFile)) {
+            writer.write(dot);
+        } catch (IOException e) {
+            System.err.println("Error exporting to Graphviz: " + e.getMessage());
+        }
     }
 }

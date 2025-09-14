@@ -12,6 +12,7 @@ import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.CodeField;
 import com.projectvisualizer.models.CodeMethod;
 import com.projectvisualizer.models.NavigationFlow;
+import com.projectvisualizer.parsers.DaggerHiltAnalyzer;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -51,6 +52,11 @@ public class JavaFileParser {
                 cu.accept(new MethodVisitor(), component);
                 cu.accept(new ConstructorVisitor(), component);
                 cu.accept(new AnnotationVisitor(), component);
+
+                // ADD DAGGER/HILT ANALYSIS HERE
+                DaggerHiltAnalyzer daggerHiltAnalyzer = new DaggerHiltAnalyzer();
+                daggerHiltAnalyzer.analyzeDaggerComponents(cu, component);
+                daggerHiltAnalyzer.analyzeHiltComponents(cu, component);
 
                 detectAndroidLayer(component);
 

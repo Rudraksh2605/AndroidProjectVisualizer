@@ -3,9 +3,6 @@ package com.projectvisualizer.models;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * DecisionPoint class represents decision nodes in business processes
- */
 public class DecisionPoint {
     private String decisionId;
     private String decisionName;

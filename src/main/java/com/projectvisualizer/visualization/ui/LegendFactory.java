@@ -40,12 +40,6 @@ public class LegendFactory {
         return legend;
     }
 
-    public static VBox createIntegrationMapLegend(Color internalColor, Color externalColor) {
-        VBox legend = baseLegend();
-        legend.getChildren().add(makeLegendItem(internalColor, "Internal Component"));
-        legend.getChildren().add(makeLegendItem(externalColor, "External Integration"));
-        return legend;
-    }
 
     public static HBox makeLegendItem(Color color, String text) {
         HBox row = new HBox(8);

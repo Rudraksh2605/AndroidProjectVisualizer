@@ -3,9 +3,6 @@ package com.projectvisualizer.models;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * ExternalIntegration class represents external system connections and integrations
- */
 public class ExternalIntegration {
     private String integrationId;
     private String integrationName;

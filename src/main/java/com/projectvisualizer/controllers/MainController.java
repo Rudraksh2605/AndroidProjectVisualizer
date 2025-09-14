@@ -205,21 +205,60 @@ public class MainController {
 
     @FXML
     private void handleExportDiagram() {
-        try {
-            // Create a snapshot of the diagram
-            WritableImage image = diagramScrollPane.snapshot(null, null);
+        if (currentAnalysisResult == null) {
+            showInfoDialog("Export", "No project loaded", "Please open a project first.");
+            return;
+        }
 
+        // Create a custom dialog with export options
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Export Diagram");
+        dialog.setHeaderText("Choose export format:");
+
+        ButtonType pngButton = new ButtonType("PNG Image");
+        ButtonType jpgButton = new ButtonType("JPEG Image");
+        ButtonType plantUmlButton = new ButtonType("PlantUML");
+        ButtonType graphvizButton = new ButtonType("Graphviz");
+        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        dialog.getDialogPane().getButtonTypes().addAll(pngButton, jpgButton, plantUmlButton, graphvizButton, cancelButton);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == pngButton) return "png";
+            if (dialogButton == jpgButton) return "jpg";
+            if (dialogButton == plantUmlButton) return "puml";
+            if (dialogButton == graphvizButton) return "dot";
+            return null;
+        });
+
+        java.util.Optional<String> result = dialog.showAndWait();
+        result.ifPresent(format -> {
+            switch (format) {
+                case "png":
+                case "jpg":
+                    exportImage(format);
+                    break;
+                case "puml":
+                    handleExportToPlantUML();
+                    break;
+                case "dot":
+                    handleExportToGraphviz();
+                    break;
+            }
+        });
+    }
+
+    private void exportImage(String format) {
+        try {
+            WritableImage image = diagramScrollPane.snapshot(null, null);
             FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Export Diagram");
-            fileChooser.getExtensionFilters().addAll(
-                    new FileChooser.ExtensionFilter("PNG", "*.png"),
-                    new FileChooser.ExtensionFilter("JPEG", "*.jpg", "*.jpeg")
-            );
+            fileChooser.setTitle("Export Diagram as " + format.toUpperCase());
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                    format.toUpperCase() + " Image", "*." + format));
 
             File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
             if (file != null) {
-                String extension = file.getName().substring(file.getName().lastIndexOf(".") + 1);
-                ImageIO.write(SwingFXUtils.fromFXImage(image, null), extension, file);
+                ImageIO.write(SwingFXUtils.fromFXImage(image, null), format, file);
                 showInfoDialog("Export Successful", "Diagram exported successfully",
                         "The diagram has been exported to: " + file.getAbsolutePath());
             }
@@ -679,6 +718,44 @@ public class MainController {
             case "Technical Architecture":
             default:
                 return GraphVisualizer.VisualizationMode.TECHNICAL_ARCHITECTURE;
+        }
+    }
+
+    @FXML
+    private void handleExportToPlantUML() {
+        if (currentAnalysisResult == null) {
+            showInfoDialog("Export", "No project loaded", "Please open a project first.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export to PlantUML");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PlantUML Files", "*.puml"));
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+
+        if (file != null) {
+            graphVisualizer.exportToPlantUML(file);
+            showInfoDialog("Export Successful", "PlantUML export complete",
+                    "The diagram has been exported to PlantUML format: " + file.getAbsolutePath());
+        }
+    }
+
+    @FXML
+    private void handleExportToGraphviz() {
+        if (currentAnalysisResult == null) {
+            showInfoDialog("Export", "No project loaded", "Please open a project first.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export to Graphviz");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Graphviz Files", "*.dot"));
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+
+        if (file != null) {
+            graphVisualizer.exportToGraphviz(file);
+            showInfoDialog("Export Successful", "Graphviz export complete",
+                    "The diagram has been exported to Graphviz format: " + file.getAbsolutePath());
         }
     }
 }

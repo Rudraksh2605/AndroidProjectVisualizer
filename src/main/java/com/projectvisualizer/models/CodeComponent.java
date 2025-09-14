@@ -20,6 +20,67 @@ public class CodeComponent {
     private List<String> layoutFiles = new ArrayList<>(); // NEW: Associated layout files
     private List<NavigationDestination> navigationDestinations = new ArrayList<>(); // NEW: Navigation info
 
+    public String getDaggerComponentType() {
+        return daggerComponentType;
+    }
+
+    public void setDaggerComponentType(String daggerComponentType) {
+        this.daggerComponentType = daggerComponentType;
+    }
+
+    private String daggerComponentType;
+
+    public boolean isHiltComponent() {
+        return hiltComponent;
+    }
+
+    public void setHiltComponent(boolean hiltComponent) {
+        this.hiltComponent = hiltComponent;
+    }
+
+    private boolean hiltComponent;
+
+    public String getHiltComponentType() {
+        return hiltComponentType;
+    }
+
+    public void setHiltComponentType(String hiltComponentType) {
+        this.hiltComponentType = hiltComponentType;
+    }
+
+    private String hiltComponentType;
+    private List<String> daggerDependencies = new ArrayList<>();
+    private boolean hasDaggerInjection;
+
+    public List<String> getDaggerDependencies() {
+        return daggerDependencies;
+    }
+
+    public void setDaggerDependencies(List<String> daggerDependencies) {
+        this.daggerDependencies = daggerDependencies;
+    }
+
+
+
+    public List<String> getDaggerInjectedDependencies() {
+        return daggerInjectedDependencies;
+    }
+
+    public void setDaggerInjectedDependencies(List<String> daggerInjectedDependencies) {
+        this.daggerInjectedDependencies = daggerInjectedDependencies;
+    }
+
+    private List<String> daggerInjectedDependencies = new ArrayList<>();
+
+    public boolean isHasDaggerInjection() {
+        return hasDaggerInjection;
+    }
+
+    public void setHasDaggerInjection(boolean hasDaggerInjection) {
+        this.hasDaggerInjection = hasDaggerInjection;
+    }
+
+
     // Getters and setters
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
