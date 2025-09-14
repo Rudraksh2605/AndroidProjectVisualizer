@@ -772,3 +772,19 @@
     @media (min-resolution: 2dppx) {
         .root { -fx-font-size: 14px; }
     }
+
+    .code-text-area {
+        -fx-font-family: "Monospaced";
+        -fx-font-size: 12px;
+        -fx-background-color: #f8fafc;
+        -fx-border-color: #e2e8f0;
+        -fx-border-radius: 4;
+        -fx-padding: 8;
+    }
+
+    .image-toolbar {
+        -fx-padding: 8px;
+        -fx-background-color: #f0f0f0;
+        -fx-border-color: #ddd;
+        -fx-border-width: 0 0 1px 0;
+    }

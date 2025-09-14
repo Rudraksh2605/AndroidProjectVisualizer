@@ -5,6 +5,8 @@
 <?import javafx.scene.shape.Circle?>
 <?import javafx.geometry.Insets?>
 <?import org.controlsfx.control.StatusBar?>
+<?import javafx.scene.image.ImageView?>
+
 
 <VBox xmlns="http://javafx.com/javafx/11.0.1"
       xmlns:fx="http://javafx.com/fxml/1"
@@ -383,7 +385,70 @@
                         </ScrollPane>
                     </VBox>
                 </Tab>
-            </TabPane>
+            
+    <!-- Added PlantUML and Graphviz Tabs -->
+    <Tab text="🌿 PlantUML">
+        <VBox spacing="10" styleClass="tab-content">
+            <HBox alignment="CENTER_LEFT" spacing="10">
+                <Label text="PlantUML Diagram" styleClass="tab-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Copy Code" onAction="#handleCopyPlantUML"/>
+                <Button text="Save As..." onAction="#handleExportToPlantUML"/>
+            </HBox>
+            <TextArea fx:id="plantUMLTextArea" VBox.vgrow="ALWAYS" 
+                      styleClass="code-text-area" editable="false"/>
+        </VBox>
+    </Tab>
+
+    <Tab text="🔄 Graphviz">
+        <VBox spacing="10" styleClass="tab-content">
+            <HBox alignment="CENTER_LEFT" spacing="10">
+                <Label text="Graphviz Diagram" styleClass="tab-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Copy Code" onAction="#handleCopyGraphviz"/>
+                <Button text="Save As..." onAction="#handleExportToGraphviz"/>
+            </HBox>
+            <TextArea fx:id="graphvizTextArea" VBox.vgrow="ALWAYS" 
+                      styleClass="code-text-area" editable="false"/>
+        </VBox>
+    </Tab>
+
+
+
+<Tab text="PlantUML Image" fx:id="plantUMLImageTab">
+    <VBox>
+        <HBox alignment="CENTER_LEFT" styleClass="image-toolbar">
+            <Button text="Zoom In" onAction="#handleZoomInPlantUML"/>
+            <Button text="Zoom Out" onAction="#handleZoomOutPlantUML"/>
+            <Button text="Reset Zoom" onAction="#handleResetZoomPlantUML"/>
+            <Button text="Export Image" onAction="#handleExportPlantUMLImage"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="Export Code" onAction="#handleExportToPlantUML"/>
+        </HBox>
+        <ScrollPane VBox.vgrow="ALWAYS">
+            <ImageView fx:id="plantUMLImageView" fitWidth="800" preserveRatio="true" />
+        </ScrollPane>
+    </VBox>
+</Tab>
+
+<Tab text="Graphviz Image" fx:id="graphvizImageTab">
+    <VBox>
+        <HBox alignment="CENTER_LEFT" styleClass="image-toolbar">
+            <Button text="Zoom In" onAction="#handleZoomInGraphviz"/>
+            <Button text="Zoom Out" onAction="#handleZoomOutGraphviz"/>
+            <Button text="Reset Zoom" onAction="#handleResetZoomGraphviz"/>
+            <Button text="Export Image" onAction="#handleExportGraphvizImage"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="Export Code" onAction="#handleExportToGraphviz"/>
+        </HBox>
+        <ScrollPane VBox.vgrow="ALWAYS">
+            <ImageView fx:id="graphvizImageView" fitWidth="800" preserveRatio="true" />
+        </ScrollPane>
+    </VBox>
+</Tab>
+
+
+</TabPane>
         </VBox>
 
     </SplitPane>

@@ -3,13 +3,18 @@ package com.projectvisualizer.controllers;
 import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.ComponentRelationship;
 import com.projectvisualizer.models.ProjectAnalysisResult;
-import com.projectvisualizer.services.ProjectAnalyzer;
+import javax.imageio.ImageIO;
 import javafx.embed.swing.SwingFXUtils;
+import com.projectvisualizer.services.ProjectAnalyzer;
+import com.projectvisualizer.visualization.GraphExporter;
 import com.projectvisualizer.visualization.GraphVisualizer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -21,7 +26,7 @@ import org.controlsfx.control.StatusBar;
 import javafx.scene.image.WritableImage;
 import javafx.stage.FileChooser;
 
-import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
@@ -58,12 +63,22 @@ public class MainController {
     @FXML private ScrollPane minimapScrollPane;
     @FXML private ComboBox<String> visualizationModeComboBox;
     @FXML private Pane legendOverlayPane;
+    @FXML private TextArea plantUMLTextArea;
+    @FXML private TextArea graphvizTextArea;
+    @FXML private ImageView plantUMLImageView;
+    @FXML private ImageView graphvizImageView;
+    @FXML private Tab plantUMLImageTab;
+    @FXML private Tab graphvizImageTab;
 
 
     private ProjectAnalysisResult currentAnalysisResult;
     private ProjectAnalyzer projectAnalyzer;
     private GraphVisualizer graphVisualizer;
     private double currentZoomLevel = 1.0;
+    private double plantUMLZoomFactor = 1.0;
+    private double graphvizZoomFactor = 1.0;
+    private BufferedImage plantUMLBufferedImage;
+    private BufferedImage graphvizBufferedImage;
 
     private GraphVisualizer.LayoutType currentLayoutType = GraphVisualizer.LayoutType.HIERARCHICAL;
     private boolean showLabels = true;
@@ -77,6 +92,8 @@ public class MainController {
         setupStatusBar();
         setupComboBoxes();
         setupCheckBoxes();
+        setupImageTabs();
+
 
         visualizationModeComboBox.getItems().addAll(
                 "Technical Architecture", "User Journey", "Business Process",
@@ -90,6 +107,21 @@ public class MainController {
 
         // Set up memory monitoring
         setupMemoryMonitoring();
+    }
+
+    private void setupImageTabs() {
+        // Add listeners to generate images when tabs are selected
+        plantUMLImageTab.setOnSelectionChanged(event -> {
+            if (plantUMLImageTab.isSelected() && currentAnalysisResult != null) {
+                generatePlantUMLImage();
+            }
+        });
+
+        graphvizImageTab.setOnSelectionChanged(event -> {
+            if (graphvizImageTab.isSelected() && currentAnalysisResult != null) {
+                generateGraphvizImage();
+            }
+        });
     }
 
     private void updateVisualizationMode(String mode) {
@@ -532,6 +564,10 @@ public class MainController {
         // Update dependencies view
         updateDependenciesView(result);
 
+        GraphExporter exporter = new GraphExporter();
+        plantUMLTextArea.setText(exporter.exportToPlantUML(result));
+        graphvizTextArea.setText(exporter.exportToGraphviz(result));
+
         // Update statistics view
         updateStatisticsView(result);
 
@@ -542,6 +578,13 @@ public class MainController {
         ScrollPane diagram = graphVisualizer.createGraphView(result);
         // Avoid nesting scroll panes; use the diagram content (shared canvas)
         diagramScrollPane.setContent(diagram.getContent());
+
+        if (plantUMLImageTab.isSelected()) {
+            generatePlantUMLImage();
+        }
+        if (graphvizImageTab.isSelected()) {
+            generateGraphvizImage();
+        }
     }
 
     private void updateDependenciesView(ProjectAnalysisResult result) {
@@ -756,6 +799,161 @@ public class MainController {
             graphVisualizer.exportToGraphviz(file);
             showInfoDialog("Export Successful", "Graphviz export complete",
                     "The diagram has been exported to Graphviz format: " + file.getAbsolutePath());
+        }
+    }
+
+    @FXML
+    private void handleCopyPlantUML() {
+        if (plantUMLTextArea.getText() != null && !plantUMLTextArea.getText().isEmpty()) {
+            Clipboard clipboard = Clipboard.getSystemClipboard();
+            ClipboardContent content = new ClipboardContent();
+            content.putString(plantUMLTextArea.getText());
+            clipboard.setContent(content);
+            showInfoDialog("Copied", "PlantUML code copied to clipboard", "");
+        }
+    }
+
+    @FXML
+    private void handleCopyGraphviz() {
+        if (graphvizTextArea.getText() != null && !graphvizTextArea.getText().isEmpty()) {
+            Clipboard clipboard = Clipboard.getSystemClipboard();
+            ClipboardContent content = new ClipboardContent();
+            content.putString(graphvizTextArea.getText());
+            clipboard.setContent(content);
+            showInfoDialog("Copied", "Graphviz code copied to clipboard", "");
+        }
+    }
+
+    private void generatePlantUMLImage() {
+        try {
+            BufferedImage image = new GraphExporter().exportToPlantUMLImage(currentAnalysisResult);
+            plantUMLBufferedImage = image; // Store the original image
+            plantUMLImageView.setImage(GraphExporter.convertToFxImage(image));
+            resetPlantUMLZoom(); // Reset zoom to 1.0 when generating new image
+        } catch (Exception e) {
+            showErrorDialog("Image Generation Error", "Failed to generate PlantUML image", e.getMessage());
+        }
+    }
+
+    private void generateGraphvizImage() {
+        try {
+            BufferedImage image = new GraphExporter().exportToGraphvizImage(currentAnalysisResult);
+            graphvizBufferedImage = image; // Store the original image
+            graphvizImageView.setImage(GraphExporter.convertToFxImage(image));
+            resetGraphvizZoom(); // Reset zoom to 1.0 when generating new image
+        } catch (Exception e) {
+            showErrorDialog("Image Generation Error",
+                    "Failed to generate Graphviz image. Make sure Graphviz is installed.",
+                    e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void resetPlantUMLZoom() {
+        plantUMLZoomFactor = 1.0;
+        updatePlantUMLImageZoom();
+    }
+
+    private void resetGraphvizZoom() {
+        graphvizZoomFactor = 1.0;
+        updateGraphvizImageZoom();
+    }
+
+    @FXML
+    private void handleZoomInPlantUML() {
+        plantUMLZoomFactor *= 1.2;
+        updatePlantUMLImageZoom();
+    }
+
+    @FXML
+    private void handleZoomOutPlantUML() {
+        plantUMLZoomFactor /= 1.2;
+        updatePlantUMLImageZoom();
+    }
+
+    @FXML
+    private void handleResetZoomPlantUML() {
+        plantUMLZoomFactor = 1.0;
+        updatePlantUMLImageZoom();
+    }
+
+    private void updatePlantUMLImageZoom() {
+        plantUMLImageView.setFitWidth(800 * plantUMLZoomFactor);
+    }
+
+    @FXML
+    private void handleZoomInGraphviz() {
+        graphvizZoomFactor *= 1.2;
+        updateGraphvizImageZoom();
+    }
+
+    @FXML
+    private void handleZoomOutGraphviz() {
+        graphvizZoomFactor /= 1.2;
+        updateGraphvizImageZoom();
+    }
+
+    @FXML
+    private void handleResetZoomGraphviz() {
+        graphvizZoomFactor = 1.0;
+        updateGraphvizImageZoom();
+    }
+
+    private void updateGraphvizImageZoom() {
+        graphvizImageView.setFitWidth(800 * graphvizZoomFactor);
+    }
+
+    @FXML
+    private void handleExportPlantUMLImage() {
+        if (plantUMLBufferedImage == null) {
+            showInfoDialog("Export", "No PlantUML image", "Please generate the PlantUML image first.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export PlantUML Image");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PNG Image", "*.png"),
+                new FileChooser.ExtensionFilter("JPEG Image", "*.jpg")
+        );
+
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+        if (file != null) {
+            try {
+                String format = file.getName().toLowerCase().endsWith(".jpg") ? "jpg" : "png";
+                ImageIO.write(plantUMLBufferedImage, format, file);
+                showInfoDialog("Export Successful", "PlantUML image exported successfully",
+                        "The image has been exported to: " + file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Export Error", "Failed to export PlantUML image", e.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    private void handleExportGraphvizImage() {
+        if (graphvizBufferedImage == null) {
+            showInfoDialog("Export", "No Graphviz image", "Please generate the Graphviz image first.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Graphviz Image");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PNG Image", "*.png"),
+                new FileChooser.ExtensionFilter("JPEG Image", "*.jpg")
+        );
+
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+        if (file != null) {
+            try {
+                String format = file.getName().toLowerCase().endsWith(".jpg") ? "jpg" : "png";
+                ImageIO.write(graphvizBufferedImage, format, file);
+                showInfoDialog("Export Successful", "Graphviz image exported successfully",
+                        "The image has been exported to: " + file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Export Error", "Failed to export Graphviz image", e.getMessage());
+            }
         }
     }
 }

@@ -31,6 +31,15 @@ dependencies {
 
     implementation("org.openjfx:javafx-swing:17.0.2")
 
+    implementation("net.sourceforge.plantuml:plantuml:1.2023.9")
+
+    // Graphviz diagram generation
+    implementation("guru.nidi:graphviz-java:0.18.1")
+    implementation("org.slf4j:slf4j-simple:1.7.36")
+
+    implementation("org.graalvm.js:js:22.3.0")
+    implementation("org.graalvm.js:js-scriptengine:22.3.0")
+
 
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
@@ -39,11 +48,20 @@ dependencies {
 
 javafx {
     version = "17.0.2"
-    modules = listOf("javafx.controls", "javafx.fxml", "javafx.graphics", "javafx.swing")
+    modules = listOf(
+        "javafx.controls",
+        "javafx.fxml",
+        "javafx.graphics",
+        "javafx.swing",
+        "javafx.base",
+        "javafx.media",
+        "javafx.web"
+    )
 }
 
 application {
     mainClass.set("com.projectvisualizer.Main")
+    mainModule.set("com.projectvisualizer")
 }
 
 tasks.test {

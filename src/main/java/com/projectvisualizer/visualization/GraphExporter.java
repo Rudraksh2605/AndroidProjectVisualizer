@@ -5,9 +5,17 @@ import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.ComponentRelationship;
 import com.projectvisualizer.models.ProjectAnalysisResult;
 
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import net.sourceforge.plantuml.SourceStringReader;
+import guru.nidi.graphviz.engine.Format;
+import guru.nidi.graphviz.engine.Graphviz;
+import guru.nidi.graphviz.engine.GraphvizCmdLineEngine;
+import guru.nidi.graphviz.engine.GraphvizJdkEngine;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
 
 public class GraphExporter {
 
@@ -25,13 +33,11 @@ public class GraphExporter {
         sb.append("  BorderColor #374151\n");
         sb.append("}\n\n");
 
-        // Add components
         for (CodeComponent component : result.getComponents()) {
             String stereotype = getPlantUMLStereotype(component.getLayer());
             sb.append("class ").append(component.getName().replace(".", "_"))
                     .append(" ").append(stereotype).append(" {\n");
 
-            // Add fields if needed
             if (!component.getFields().isEmpty()) {
                 for (int i = 0; i < Math.min(3, component.getFields().size()); i++) {
                     sb.append("  ").append(component.getFields().get(i).getName()).append("\n");
@@ -43,7 +49,6 @@ public class GraphExporter {
             sb.append("}\n\n");
         }
 
-        // Add relationships
         for (ComponentRelationship rel : result.getRelationships()) {
             String source = rel.getSourceId().contains(".") ?
                     rel.getSourceId().substring(rel.getSourceId().lastIndexOf(".") + 1) : rel.getSourceId();
@@ -66,7 +71,6 @@ public class GraphExporter {
         sb.append("  node [shape=record, fontname=Arial, fontsize=10];\n");
         sb.append("  edge [fontname=Arial, fontsize=9];\n\n");
 
-        // Add nodes
         for (CodeComponent component : result.getComponents()) {
             String color = getGraphvizColor(component.getLayer());
             String label = component.getName();
@@ -89,7 +93,6 @@ public class GraphExporter {
 
         sb.append("\n");
 
-        // Add edges
         for (ComponentRelationship rel : result.getRelationships()) {
             String source = rel.getSourceId().contains(".") ?
                     rel.getSourceId().substring(rel.getSourceId().lastIndexOf(".") + 1) : rel.getSourceId();
@@ -148,6 +151,41 @@ public class GraphExporter {
             case "USES": return "solid";
             case "DEPENDS": return "dotted";
             default: return "solid";
+        }
+    }
+
+    public BufferedImage exportToPlantUMLImage(ProjectAnalysisResult result) throws IOException {
+        String plantUMLCode = exportToPlantUML(result);
+        SourceStringReader reader = new SourceStringReader(plantUMLCode);
+        final ByteArrayOutputStream os = new ByteArrayOutputStream();
+        reader.outputImage(os);
+        os.close();
+
+        byte[] imageData = os.toByteArray();
+        return ImageIO.read(new ByteArrayInputStream(imageData));
+    }
+
+    public BufferedImage exportToGraphvizImage(ProjectAnalysisResult result) throws IOException {
+        String graphvizCode = exportToGraphviz(result);
+
+        try {
+            // Try fast native engine first
+            Graphviz.useEngine(new GraphvizCmdLineEngine());
+            return Graphviz.fromString(graphvizCode).render(Format.PNG).toImage();
+        } catch (Exception ex) {
+            // Fallback to pure Java engine if 'dot' is not found
+            Graphviz.useEngine(new GraphvizJdkEngine());
+            return Graphviz.fromString(graphvizCode).render(Format.PNG).toImage();
+        }
+    }
+
+    public static javafx.scene.image.Image convertToFxImage(BufferedImage image) {
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        try {
+            ImageIO.write(image, "png", os);
+            return new javafx.scene.image.Image(new ByteArrayInputStream(os.toByteArray()));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to convert image", e);
         }
     }
 }
