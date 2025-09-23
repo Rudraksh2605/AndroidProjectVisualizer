@@ -17,7 +17,7 @@
 
     <!-- Enhanced Menu Bar with Modern Styling -->
     <MenuBar>
-        <!-- Menu items unchanged from original -->
+        <!-- Enhanced Export Options -->
         <Menu text="File" mnemonicParsing="false">
             <MenuItem text="Open Project..." mnemonicParsing="false"
                       onAction="#handleOpenProject"
@@ -25,9 +25,23 @@
             <MenuItem text="Recent Projects" mnemonicParsing="false"
                       disable="true"/>
             <SeparatorMenuItem/>
-            <MenuItem text="Export Diagram..." mnemonicParsing="false"
-                      onAction="#handleExportDiagram"
-                      accelerator="Ctrl+E"/>
+
+            <!-- Enhanced Export Options -->
+            <Menu text="Export Diagram...">
+                <MenuItem text="Enhanced PlantUML..." mnemonicParsing="false"
+                          onAction="#handleExportEnhancedDiagram"/>
+                <MenuItem text="Enhanced Graphviz..." mnemonicParsing="false"
+                          onAction="#handleExportEnhancedDiagram"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="PNG Image..." mnemonicParsing="false"
+                          onAction="#handleExportDiagram"/>
+                <MenuItem text="JPEG Image..." mnemonicParsing="false"
+                          onAction="#handleExportDiagram"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="Legacy Export..." mnemonicParsing="false"
+                          onAction="#handleExportDiagram"/>
+            </Menu>
+
             <MenuItem text="Export Report..." mnemonicParsing="false"
                       onAction="#handleExportReport"
                       accelerator="Ctrl+R"/>
@@ -41,6 +55,7 @@
                       accelerator="Ctrl+Q"/>
         </Menu>
 
+        <!-- Enhanced View Menu -->
         <Menu text="View" mnemonicParsing="false">
             <MenuItem text="Zoom In" mnemonicParsing="false"
                       onAction="#handleZoomIn"
@@ -55,10 +70,32 @@
                       onAction="#handleFitToWindow"
                       accelerator="Ctrl+F"/>
             <SeparatorMenuItem/>
+
+            <!-- NEW: Abstraction Level Menu -->
+            <Menu text="Detail Level">
+                <MenuItem text="High Level (Modules)" mnemonicParsing="false"/>
+                <MenuItem text="Component Flow" mnemonicParsing="false"/>
+                <MenuItem text="Layered Architecture" mnemonicParsing="false"/>
+                <MenuItem text="Feature Based" mnemonicParsing="false"/>
+                <MenuItem text="Detailed (All Classes)" mnemonicParsing="false"/>
+            </Menu>
+
+            <SeparatorMenuItem/>
             <MenuItem text="Show Grid" mnemonicParsing="false"
                       onAction="#handleToggleGrid"/>
             <MenuItem text="Show Minimap" mnemonicParsing="false"
                       onAction="#handleToggleMinimap"/>
+            <SeparatorMenuItem/>
+
+            <!-- NEW: Clustering Options -->
+            <Menu text="Clustering">
+                <CheckMenuItem text="Enable Clustering" selected="true"/>
+                <CheckMenuItem text="Aggregate Edges" selected="true"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="Expand All Nodes"/>
+                <MenuItem text="Collapse All Nodes"/>
+            </Menu>
+
             <SeparatorMenuItem/>
             <CheckMenuItem fx:id="darkModeToggle" text="Dark Mode"
                            mnemonicParsing="false"
@@ -139,7 +176,7 @@
                           styleClass="modern-tree"/>
             </VBox>
 
-            <!-- Filter and Search Section -->
+            <!-- Enhanced Filter and Search Section -->
             <VBox spacing="8" styleClass="sidebar-section filter-section">
                 <Label text="Filters &amp; Search" styleClass="section-title"/>
 
@@ -174,12 +211,48 @@
                               styleClass="filter-combo"
                               onAction="#handleLanguageFilter"/>
                 </VBox>
+
+                <!-- NEW: Advanced Filtering Options -->
+                <Separator/>
+
+                <Label text="Advanced Options" styleClass="section-title"/>
+
+                <VBox spacing="8">
+                    <CheckBox fx:id="hideUtilityClassesCheckBox" text="Hide Utility Classes"
+                              selected="true">
+                        <tooltip>
+                            <Tooltip text="Hide utility and helper classes"/>
+                        </tooltip>
+                    </CheckBox>
+
+                    <CheckBox fx:id="hideTestClassesCheckBox" text="Hide Test Classes"
+                              selected="true">
+                        <tooltip>
+                            <Tooltip text="Hide test-related classes"/>
+                        </tooltip>
+                    </CheckBox>
+
+                    <!-- NEW: Complexity Threshold -->
+                    <VBox spacing="4">
+                        <Label text="Complexity Threshold:" styleClass="filter-label"/>
+                        <Slider fx:id="complexityThresholdSlider"
+                                min="0" max="1" value="0.1"
+                                showTickLabels="false"
+                                showTickMarks="true"
+                                majorTickUnit="0.25"
+                                minorTickCount="1">
+                            <tooltip>
+                                <Tooltip text="Filter components by complexity"/>
+                            </tooltip>
+                        </Slider>
+                    </VBox>
+                </VBox>
             </VBox>
         </VBox>
 
         <!-- Main Visualization Area -->
         <VBox spacing="0" styleClass="main-content-area">
-            <!-- Enhanced Toolbar -->
+            <!-- Enhanced Toolbar with Abstraction Level Controls -->
             <HBox styleClass="graph-toolbar" alignment="CENTER_LEFT" spacing="12">
                 <!-- Layout Controls -->
                 <VBox spacing="4">
@@ -193,7 +266,21 @@
 
                 <Separator orientation="VERTICAL"/>
 
-                <!-- FIXED: Added Missing Visualization Mode Controls -->
+                <!-- NEW: Abstraction Level Controls -->
+                <VBox spacing="4">
+                    <Label text="Detail Level:" styleClass="toolbar-label"/>
+                    <ComboBox fx:id="abstractionLevelComboBox"
+                              value="High Level"
+                              styleClass="toolbar-combo">
+                        <tooltip>
+                            <Tooltip text="Select visualization detail level"/>
+                        </tooltip>
+                    </ComboBox>
+                </VBox>
+
+                <Separator orientation="VERTICAL"/>
+
+                <!-- Visualization Mode Controls -->
                 <VBox spacing="4">
                     <Label text="Mode:" styleClass="toolbar-label"/>
                     <ComboBox fx:id="visualizationModeComboBox"
@@ -201,6 +288,20 @@
                               styleClass="toolbar-combo">
                         <tooltip>
                             <Tooltip text="Select visualization mode"/>
+                        </tooltip>
+                    </ComboBox>
+                </VBox>
+
+                <Separator orientation="VERTICAL"/>
+
+                <!-- NEW: Feature Filter -->
+                <VBox spacing="4">
+                    <Label text="Feature:" styleClass="toolbar-label"/>
+                    <ComboBox fx:id="featureFilterComboBox"
+                              value="All Features"
+                              styleClass="toolbar-combo">
+                        <tooltip>
+                            <Tooltip text="Filter by feature"/>
                         </tooltip>
                     </ComboBox>
                 </VBox>
@@ -252,12 +353,55 @@
                     </HBox>
                 </VBox>
 
+                <Separator orientation="VERTICAL"/>
+
+                <!-- NEW: Clustering and Filtering Controls -->
+                <VBox spacing="4">
+                    <Label text="Clustering:" styleClass="toolbar-label"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <CheckBox fx:id="enableClusteringCheckBox" text="Group"
+                                  selected="true">
+                            <tooltip>
+                                <Tooltip text="Enable component clustering"/>
+                            </tooltip>
+                        </CheckBox>
+                        <CheckBox fx:id="enableEdgeAggregationCheckBox" text="Merge Edges"
+                                  selected="true">
+                            <tooltip>
+                                <Tooltip text="Aggregate multiple edges"/>
+                            </tooltip>
+                        </CheckBox>
+                    </HBox>
+                </VBox>
+
                 <Region HBox.hgrow="ALWAYS"/>
 
-                <!-- Action Buttons -->
+                <!-- Enhanced Action Buttons -->
                 <HBox spacing="8" alignment="CENTER_RIGHT">
+                    <!-- NEW: Node Expansion Controls -->
+                    <Button fx:id="expandAllButton" text="🔓 Expand All"
+                            styleClass="action-button secondary"
+                            disable="true">
+                        <tooltip>
+                            <Tooltip text="Expand all clustered nodes"/>
+                        </tooltip>
+                    </Button>
+                    <Button fx:id="collapseAllButton" text="🔒 Collapse All"
+                            styleClass="action-button secondary"
+                            disable="true">
+                        <tooltip>
+                            <Tooltip text="Collapse all expanded nodes"/>
+                        </tooltip>
+                    </Button>
+
+                    <Separator orientation="VERTICAL"/>
+
                     <Button text="📷 Export" styleClass="action-button secondary"
-                            onAction="#handleExportDiagram"/>
+                            onAction="#handleExportEnhancedDiagram">
+                        <tooltip>
+                            <Tooltip text="Export enhanced diagram"/>
+                        </tooltip>
+                    </Button>
                     <Button text="🔍 Find" styleClass="action-button secondary"
                             onAction="#handleFindComponent"/>
                     <Button text="⟳ Refresh" styleClass="action-button"
@@ -385,72 +529,67 @@
                         </ScrollPane>
                     </VBox>
                 </Tab>
-            
-    <!-- Added PlantUML and Graphviz Tabs -->
-    <Tab text="🌿 PlantUML">
-        <VBox spacing="10" styleClass="tab-content">
-            <HBox alignment="CENTER_LEFT" spacing="10">
-                <Label text="PlantUML Diagram" styleClass="tab-title"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Button text="Copy Code" onAction="#handleCopyPlantUML"/>
-                <Button text="Save As..." onAction="#handleExportToPlantUML"/>
-            </HBox>
-            <TextArea fx:id="plantUMLTextArea" VBox.vgrow="ALWAYS" 
-                      styleClass="code-text-area" editable="false"/>
+
+                <!-- Added PlantUML and Graphviz Tabs -->
+                <Tab text="🌿 PlantUML">
+                    <VBox spacing="10" styleClass="tab-content">
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Label text="PlantUML Diagram" styleClass="tab-title"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Copy Code" onAction="#handleCopyPlantUML"/>
+                            <Button text="Save As..." onAction="#handleExportToPlantUML"/>
+                        </HBox>
+                        <TextArea fx:id="plantUMLTextArea" VBox.vgrow="ALWAYS"
+                                  styleClass="code-text-area" editable="false"/>
+                    </VBox>
+                </Tab>
+
+                <Tab text="🔄 Graphviz">
+                    <VBox spacing="10" styleClass="tab-content">
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Label text="Graphviz Diagram" styleClass="tab-title"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Copy Code" onAction="#handleCopyGraphviz"/>
+                            <Button text="Save As..." onAction="#handleExportToGraphviz"/>
+                        </HBox>
+                        <TextArea fx:id="graphvizTextArea" VBox.vgrow="ALWAYS"
+                                  styleClass="code-text-area" editable="false"/>
+                    </VBox>
+                </Tab>
+
+                <Tab text="PlantUML Image" fx:id="plantUMLImageTab">
+                    <VBox>
+                        <HBox alignment="CENTER_LEFT" styleClass="image-toolbar">
+                            <Button text="Zoom In" onAction="#handleZoomInPlantUML"/>
+                            <Button text="Zoom Out" onAction="#handleZoomOutPlantUML"/>
+                            <Button text="Reset Zoom" onAction="#handleResetZoomPlantUML"/>
+                            <Button text="Export Image" onAction="#handleExportPlantUMLImage"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Export Code" onAction="#handleExportToPlantUML"/>
+                        </HBox>
+                        <ScrollPane VBox.vgrow="ALWAYS">
+                            <ImageView fx:id="plantUMLImageView" fitWidth="800" preserveRatio="true" />
+                        </ScrollPane>
+                    </VBox>
+                </Tab>
+
+                <Tab text="Graphviz Image" fx:id="graphvizImageTab">
+                    <VBox>
+                        <HBox alignment="CENTER_LEFT" styleClass="image-toolbar">
+                            <Button text="Zoom In" onAction="#handleZoomInGraphviz"/>
+                            <Button text="Zoom Out" onAction="#handleZoomOutGraphviz"/>
+                            <Button text="Reset Zoom" onAction="#handleResetZoomGraphviz"/>
+                            <Button text="Export Image" onAction="#handleExportGraphvizImage"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Export Code" onAction="#handleExportToGraphviz"/>
+                        </HBox>
+                        <ScrollPane VBox.vgrow="ALWAYS">
+                            <ImageView fx:id="graphvizImageView" fitWidth="800" preserveRatio="true" />
+                        </ScrollPane>
+                    </VBox>
+                </Tab>
+            </TabPane>
         </VBox>
-    </Tab>
-
-    <Tab text="🔄 Graphviz">
-        <VBox spacing="10" styleClass="tab-content">
-            <HBox alignment="CENTER_LEFT" spacing="10">
-                <Label text="Graphviz Diagram" styleClass="tab-title"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Button text="Copy Code" onAction="#handleCopyGraphviz"/>
-                <Button text="Save As..." onAction="#handleExportToGraphviz"/>
-            </HBox>
-            <TextArea fx:id="graphvizTextArea" VBox.vgrow="ALWAYS" 
-                      styleClass="code-text-area" editable="false"/>
-        </VBox>
-    </Tab>
-
-
-
-<Tab text="PlantUML Image" fx:id="plantUMLImageTab">
-    <VBox>
-        <HBox alignment="CENTER_LEFT" styleClass="image-toolbar">
-            <Button text="Zoom In" onAction="#handleZoomInPlantUML"/>
-            <Button text="Zoom Out" onAction="#handleZoomOutPlantUML"/>
-            <Button text="Reset Zoom" onAction="#handleResetZoomPlantUML"/>
-            <Button text="Export Image" onAction="#handleExportPlantUMLImage"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Button text="Export Code" onAction="#handleExportToPlantUML"/>
-        </HBox>
-        <ScrollPane VBox.vgrow="ALWAYS">
-            <ImageView fx:id="plantUMLImageView" fitWidth="800" preserveRatio="true" />
-        </ScrollPane>
-    </VBox>
-</Tab>
-
-<Tab text="Graphviz Image" fx:id="graphvizImageTab">
-    <VBox>
-        <HBox alignment="CENTER_LEFT" styleClass="image-toolbar">
-            <Button text="Zoom In" onAction="#handleZoomInGraphviz"/>
-            <Button text="Zoom Out" onAction="#handleZoomOutGraphviz"/>
-            <Button text="Reset Zoom" onAction="#handleResetZoomGraphviz"/>
-            <Button text="Export Image" onAction="#handleExportGraphvizImage"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Button text="Export Code" onAction="#handleExportToGraphviz"/>
-        </HBox>
-        <ScrollPane VBox.vgrow="ALWAYS">
-            <ImageView fx:id="graphvizImageView" fitWidth="800" preserveRatio="true" />
-        </ScrollPane>
-    </VBox>
-</Tab>
-
-
-</TabPane>
-        </VBox>
-
     </SplitPane>
 
     <!-- Enhanced Status Bar -->

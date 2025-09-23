@@ -3,6 +3,7 @@ package com.projectvisualizer.visualization;
 import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.ComponentRelationship;
 import com.projectvisualizer.models.ProjectAnalysisResult;
+import com.projectvisualizer.visualization.builders.*;
 import javafx.animation.*;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
@@ -30,6 +31,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import java.util.stream.Collectors;
 
 public class GraphVisualizer {
     // Constants for node sizing and spacing
@@ -42,6 +44,11 @@ public class GraphVisualizer {
     private static final double CURVE_STRENGTH = 100;
 
     private ProjectAnalysisResult currentResult;
+    private VisualizationConfig config = new VisualizationConfig();
+    private AbstractionLevel currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
+    private VisualizationGraph currentGraph;
+    private EnhancedGraphExporter enhancedExporter = new EnhancedGraphExporter();
+
 
     // Color constants
     private static final Color UI_COLOR = Color.web("#3b82f6");
@@ -116,6 +123,7 @@ public class GraphVisualizer {
         graphPane.getStyleClass().add("graph-container");
         this.currentResult = result;
 
+
         // NEW: Create multi-mode visualization
         switch (currentMode) {
             case USER_JOURNEY:
@@ -131,14 +139,16 @@ public class GraphVisualizer {
                 return createTechnicalArchitectureView(result);
         }
 
-        // REMOVE ALL THE CODE BELOW - IT'S UNREACHABLE!
-        // DELETE FROM HERE DOWN TO THE END OF THE METHOD
     }
 
 
     private ScrollPane createTechnicalArchitectureView(ProjectAnalysisResult result) {
         // This should contain your EXISTING createGraphView logic
-        ProjectAnalysisResult enhancedResult = enhanceWithStartEndNodes(result);
+        this.currentGraph = buildGraph(result, currentAbstractionLevel);
+
+        // Handle abstraction level filtering
+        ProjectAnalysisResult filteredResult = applyAbstractionLevelFiltering(result, currentAbstractionLevel);
+        ProjectAnalysisResult enhancedResult = enhanceWithStartEndNodes(filteredResult);
         calculateDynamicCanvasSize(enhancedResult);
 
         if (showGrid) {
@@ -495,12 +505,18 @@ public class GraphVisualizer {
 
     private Color getColorForFlowType(UserFlowComponent.FlowType flowType) {
         switch (flowType) {
-            case ENTRY_POINT: return Color.web("#10b981"); // Green
-            case MAIN_FLOW: return Color.web("#3b82f6");   // Blue
-            case DECISION_POINT: return Color.web("#f59e0b"); // Yellow
-            case EXIT_POINT: return Color.web("#ef4444");  // Red
-            case ERROR_HANDLING: return Color.web("#f97316"); // Orange
-            default: return Color.web("#6b7280"); // Gray
+            case ENTRY_POINT:
+                return Color.web("#10b981"); // Green
+            case MAIN_FLOW:
+                return Color.web("#3b82f6");   // Blue
+            case DECISION_POINT:
+                return Color.web("#f59e0b"); // Yellow
+            case EXIT_POINT:
+                return Color.web("#ef4444");  // Red
+            case ERROR_HANDLING:
+                return Color.web("#f97316"); // Orange
+            default:
+                return Color.web("#6b7280"); // Gray
         }
     }
 
@@ -800,10 +816,14 @@ public class GraphVisualizer {
         if (layer == null) return OTHER_COLOR;
 
         switch (layer) {
-            case "UI": return UI_COLOR;
-            case "Business Logic": return BUSINESS_COLOR;
-            case "Data": return DATA_COLOR;
-            default: return OTHER_COLOR;
+            case "UI":
+                return UI_COLOR;
+            case "Business Logic":
+                return BUSINESS_COLOR;
+            case "Data":
+                return DATA_COLOR;
+            default:
+                return OTHER_COLOR;
         }
     }
 
@@ -834,15 +854,24 @@ public class GraphVisualizer {
         if (language == null) return GRAY_400;
 
         switch (language.toLowerCase()) {
-            case "java": return PRIMARY_500;
-            case "kotlin": return PURPLE;
-            case "dart": return INFO;
-            case "javascript": return WARNING;
-            case "typescript": return PRIMARY_600;
-            case "python": return Color.web("#3776ab");
-            case "c++": return Color.web("#f34b7d");
-            case "c#": return Color.web("#178600");
-            default: return GRAY_400;
+            case "java":
+                return PRIMARY_500;
+            case "kotlin":
+                return PURPLE;
+            case "dart":
+                return INFO;
+            case "javascript":
+                return WARNING;
+            case "typescript":
+                return PRIMARY_600;
+            case "python":
+                return Color.web("#3776ab");
+            case "c++":
+                return Color.web("#f34b7d");
+            case "c#":
+                return Color.web("#178600");
+            default:
+                return GRAY_400;
         }
     }
 
@@ -1864,8 +1893,8 @@ public class GraphVisualizer {
 
             // Sort for stability: Entry/Decision/Main/Exit
             col.sort(Comparator.comparing((UserFlowComponent f) -> f.getFlowType() == UserFlowComponent.FlowType.ENTRY_POINT ? 0 :
-                    f.getFlowType() == UserFlowComponent.FlowType.DECISION_POINT ? 1 :
-                    f.getFlowType() == UserFlowComponent.FlowType.MAIN_FLOW ? 2 : 3)
+                            f.getFlowType() == UserFlowComponent.FlowType.DECISION_POINT ? 1 :
+                                    f.getFlowType() == UserFlowComponent.FlowType.MAIN_FLOW ? 2 : 3)
                     .thenComparing(UserFlowComponent::getScreenName, Comparator.nullsLast(String::compareToIgnoreCase)));
 
             for (int i = 0; i < col.size(); i++) {
@@ -2217,14 +2246,164 @@ public class GraphVisualizer {
         }
     }
 
-    public void exportToGraphviz(File outputFile) {
-        GraphExporter exporter = new GraphExporter();
-        String dot = exporter.exportToGraphviz(this.currentResult); // Use stored result
+    // Add these missing methods
+    public void setAbstractionLevel(AbstractionLevel level) {
+        this.currentAbstractionLevel = level;
+    }
 
-        try (FileWriter writer = new FileWriter(outputFile)) {
-            writer.write(dot);
-        } catch (IOException e) {
-            System.err.println("Error exporting to Graphviz: " + e.getMessage());
+    public void setVisualizationConfig(VisualizationConfig config) {
+        this.config = config;
+    }
+
+    public VisualizationGraph getCurrentGraph() {
+        return currentGraph;
+    }
+
+    public void toggleNodeExpansion(String nodeId) {
+        VisualizationNode node = currentGraph.getNode(nodeId);
+        if (node != null && node.isExpandable()) {
+            if (node.isExpanded()) {
+                currentGraph.collapseNode(nodeId);
+            } else {
+                currentGraph.expandNode(nodeId);
+            }
         }
     }
+
+    private VisualizationGraph buildGraph(ProjectAnalysisResult result, AbstractionLevel level) {
+        AbstractVisualizationBuilder builder = null;
+
+        switch (level) {
+            case HIGH_LEVEL:
+                builder = new HighLevelModuleBuilder(result, config);
+                break;
+            case COMPONENT_FLOW:
+                builder = new ComponentFlowBuilder(result, config);
+                break;
+            case LAYERED_ARCHITECTURE:
+                builder = new LayeredArchitectureBuilder(result, config);
+                break;
+            case FEATURE_BASED:
+                builder = new FeatureBasedBuilder(result, config);
+                break;
+            case DETAILED:
+                builder = new DetailedBuilder(result, config);
+                break;
+        }
+
+        return builder != null ? builder.buildGraph() : null;
+    }
+
+    public void clearFilters() {
+        // Clear any applied filters
+        // Implementation would depend on how filtering is stored
+    }
+
+    public void filterByFeature(String feature) {
+        // Filter nodes by feature
+        // Implementation would depend on how filtering is stored
+    }
+
+    public void filterByLayer(String layer) {
+        // Filter nodes by layer
+        // Implementation would depend on how filtering is stored
+    }
+
+    private ProjectAnalysisResult applyAbstractionLevelFiltering(ProjectAnalysisResult result, AbstractionLevel level) {
+        ProjectAnalysisResult filtered = new ProjectAnalysisResult();
+        filtered.setProjectName(result.getProjectName());
+        filtered.setProjectPath(result.getProjectPath());
+        filtered.setGradleDependencies(result.getGradleDependencies());
+        filtered.setFlutterDependencies(result.getFlutterDependencies());
+        filtered.setJsDependencies(result.getJsDependencies());
+
+        List<CodeComponent> filteredComponents = new ArrayList<>();
+        List<ComponentRelationship> filteredRelationships = new ArrayList<>();
+
+        switch (level) {
+            case HIGH_LEVEL:
+                // Show only major architectural components
+                filteredComponents = result.getComponents().stream()
+                        .filter(c -> isArchitecturalComponent(c))
+                        .collect(Collectors.toList());
+                break;
+
+            case COMPONENT_FLOW:
+                // Show components with their flow relationships
+                filteredComponents = result.getComponents().stream()
+                        .filter(c -> hasFlowRelationships(c, result))
+                        .collect(Collectors.toList());
+                break;
+
+            case LAYERED_ARCHITECTURE:
+                // Group by architectural layers
+                filteredComponents = result.getComponents().stream()
+                        .filter(c -> c.getLayer() != null && !c.getLayer().isEmpty())
+                        .collect(Collectors.toList());
+                break;
+
+            case FEATURE_BASED:
+                // Group by features
+                filteredComponents = result.getComponents().stream()
+                        .filter(c -> inferFeatureFromComponent(c) != null)
+                        .collect(Collectors.toList());
+                break;
+
+            case DETAILED:
+            default:
+                // Show all components
+                filteredComponents = new ArrayList<>(result.getComponents());
+                break;
+        }
+
+        // Filter relationships to only include those between filtered components
+        Set<String> componentIds = filteredComponents.stream()
+                .map(CodeComponent::getId)
+                .collect(Collectors.toSet());
+
+        filteredRelationships = result.getRelationships().stream()
+                .filter(r -> componentIds.contains(r.getSourceId()) && componentIds.contains(r.getTargetId()))
+                .collect(Collectors.toList());
+
+        filtered.setComponents(filteredComponents);
+        filtered.setRelationships(filteredRelationships);
+
+        return filtered;
+    }
+
+    private boolean isArchitecturalComponent(CodeComponent component) {
+        String name = component.getName().toLowerCase();
+        String type = component.getType().toLowerCase();
+
+        return name.contains("activity") || name.contains("fragment") ||
+                name.contains("repository") || name.contains("service") ||
+                name.contains("manager") || name.contains("controller") ||
+                type.contains("interface") || component.getMethods().size() > 5;
+    }
+
+    private boolean hasFlowRelationships(CodeComponent component, ProjectAnalysisResult result) {
+        String componentId = component.getId();
+        return result.getRelationships().stream()
+                .anyMatch(r -> r.getSourceId().equals(componentId) || r.getTargetId().equals(componentId));
+    }
+
+    private String inferFeatureFromComponent(CodeComponent component) {
+        String packagePath = component.getId();
+        String[] parts = packagePath.split("\\.");
+
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i].toLowerCase();
+            if (part.equals("feature") || part.equals("features")) {
+                if (i + 1 < parts.length) {
+                    return parts[i + 1];
+                }
+            }
+            if (part.matches("(login|auth|profile|dashboard|home|settings|payment|search|chat|notification)")) {
+                return part;
+            }
+        }
+
+        return "core";
+    }
+
 }

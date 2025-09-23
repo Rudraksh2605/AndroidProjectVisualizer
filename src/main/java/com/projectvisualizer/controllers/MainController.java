@@ -4,14 +4,16 @@ import com.projectvisualizer.models.CodeComponent;
 import com.projectvisualizer.models.ComponentRelationship;
 import com.projectvisualizer.models.ProjectAnalysisResult;
 import javax.imageio.ImageIO;
+import java.nio.file.Files;
+
+import com.projectvisualizer.visualization.*;
 import javafx.embed.swing.SwingFXUtils;
 import com.projectvisualizer.services.ProjectAnalyzer;
-import com.projectvisualizer.visualization.GraphExporter;
-import com.projectvisualizer.visualization.GraphVisualizer;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.control.Slider;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
@@ -70,8 +72,19 @@ public class MainController {
     @FXML private Tab plantUMLImageTab;
     @FXML private Tab graphvizImageTab;
 
+    @FXML private ComboBox<String> abstractionLevelComboBox;
+    @FXML private CheckBox enableClusteringCheckBox;
+    @FXML private CheckBox enableEdgeAggregationCheckBox;
+    @FXML private CheckBox hideUtilityClassesCheckBox;
+    @FXML private CheckBox hideTestClassesCheckBox;
+    @FXML private Slider complexityThresholdSlider;
+    @FXML private ComboBox<String> featureFilterComboBox;
+    @FXML private Button expandAllButton;
+    @FXML private Button collapseAllButton;
 
-    private ProjectAnalysisResult currentAnalysisResult;
+    private EnhancedGraphExporter enhancedExporter;
+    private AbstractionLevel currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
+    private VisualizationConfig visualizationConfig = new VisualizationConfig();
     private ProjectAnalyzer projectAnalyzer;
     private GraphVisualizer graphVisualizer;
     private double currentZoomLevel = 1.0;
@@ -79,6 +92,9 @@ public class MainController {
     private double graphvizZoomFactor = 1.0;
     private BufferedImage plantUMLBufferedImage;
     private BufferedImage graphvizBufferedImage;
+
+    private ProjectAnalysisResult currentAnalysisResult;
+
 
     private GraphVisualizer.LayoutType currentLayoutType = GraphVisualizer.LayoutType.HIERARCHICAL;
     private boolean showLabels = true;
@@ -88,18 +104,18 @@ public class MainController {
     public void initialize() {
         projectAnalyzer = new ProjectAnalyzer();
         graphVisualizer = new GraphVisualizer();
+        enhancedExporter = new EnhancedGraphExporter();
         setupProjectTree();
         setupStatusBar();
         setupComboBoxes();
         setupCheckBoxes();
         setupImageTabs();
 
+        setupEnhancedControls();
 
-        visualizationModeComboBox.getItems().addAll(
-                "Technical Architecture", "User Journey", "Business Process",
-                "Feature Overview", "Integration Map"
-        );
-        visualizationModeComboBox.setValue("Technical Architecture"); // Default to technical view
+
+
+        visualizationModeComboBox.setValue("Technical Architecture");
 
         visualizationModeComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
             updateVisualizationMode(newVal);
@@ -127,6 +143,37 @@ public class MainController {
     private void updateVisualizationMode(String mode) {
         GraphVisualizer.VisualizationMode vizMode = mapStringToVisualizationMode(mode);
         graphVisualizer.setVisualizationMode(vizMode);
+
+        // Set appropriate abstraction level based on mode
+        switch (vizMode) {
+            case TECHNICAL_ARCHITECTURE:
+                abstractionLevelComboBox.setValue(AbstractionLevel.HIGH_LEVEL.getDisplayName());
+                currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
+                break;
+            case USER_JOURNEY:
+                // User journey view uses a different approach, not directly mapped to abstraction levels
+                // Keep current abstraction level or set to a default
+                break;
+            case BUSINESS_PROCESS:
+                abstractionLevelComboBox.setValue(AbstractionLevel.COMPONENT_FLOW.getDisplayName());
+                currentAbstractionLevel = AbstractionLevel.COMPONENT_FLOW;
+                break;
+            case FEATURE_OVERVIEW:
+                abstractionLevelComboBox.setValue(AbstractionLevel.FEATURE_BASED.getDisplayName());
+                currentAbstractionLevel = AbstractionLevel.FEATURE_BASED;
+                break;
+            case INTEGRATION_MAP:
+                abstractionLevelComboBox.setValue(AbstractionLevel.DETAILED.getDisplayName());
+                currentAbstractionLevel = AbstractionLevel.DETAILED;
+                break;
+            default:
+                abstractionLevelComboBox.setValue(AbstractionLevel.HIGH_LEVEL.getDisplayName());
+                currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
+        }
+
+        // Update the graph visualizer with the current abstraction level
+        graphVisualizer.setAbstractionLevel(currentAbstractionLevel);
+
         refreshGraph();
     }
 
@@ -138,9 +185,8 @@ public class MainController {
 
         // Setup layout combo
         layoutComboBox.getItems().addAll("Hierarchical", "Force-Directed", "Circular", "Grid", "Layered");
-        layoutComboBox.setValue("Hierarchical");
+        layoutComboBox.setValue("Grid");
 
-        // Add listener for layout changes
         layoutComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
             switch (newVal) {
                 case "Hierarchical":
@@ -161,21 +207,36 @@ public class MainController {
             }
             refreshGraph();
         });
+
+        // Enhanced visualization mode combo
+        visualizationModeComboBox.getItems().addAll(
+                "Technical Architecture", "User Journey", "Business Process",
+                "Feature Overview", "Integration Map"
+        );
+        visualizationModeComboBox.setValue("Technical Architecture");
+
+        visualizationModeComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateVisualizationMode(newVal);
+        });
     }
 
     private void refreshGraph() {
         if (currentAnalysisResult != null) {
             // Update graph visualizer settings
             graphVisualizer.setLayoutType(currentLayoutType);
+            graphVisualizer.setAbstractionLevel(currentAbstractionLevel);
+            graphVisualizer.setVisualizationConfig(visualizationConfig);
             graphVisualizer.setShowLabels(showLabels);
             graphVisualizer.setShowGrid(showGrid);
 
+            // Update feature filter options
+            updateFeatureFilterOptions();
+
             // Refresh the diagram
             ScrollPane diagram = graphVisualizer.createGraphView(currentAnalysisResult);
-            // Avoid nesting scroll panes; use the diagram content (shared canvas)
             diagramScrollPane.setContent(diagram.getContent());
 
-            // Place legend into fixed overlay so it doesn't scroll
+            // Place legend into fixed overlay
             if (legendOverlayPane != null) {
                 legendOverlayPane.getChildren().clear();
                 javafx.scene.layout.Region legend = graphVisualizer.getLegend();
@@ -184,12 +245,15 @@ public class MainController {
                 }
             }
 
-            // Auto-fit by default after content is laid out
+            // Auto-fit after layout
             javafx.application.Platform.runLater(() -> {
                 graphVisualizer.fitToWindow(diagramScrollPane);
                 currentZoomLevel = graphVisualizer.getCurrentZoom();
                 updateZoom();
             });
+
+            // Update export text areas with enhanced content
+            updateExportTextAreas();
         }
     }
 
@@ -373,12 +437,6 @@ public class MainController {
     private void handleLayoutChange() {
         String selectedLayout = layoutComboBox.getValue();
         // Implementation to change layout
-    }
-
-    @FXML
-    private void handleLayerFilter() {
-        String selectedLayer = layerFilterComboBox.getValue();
-        filterByLayer(selectedLayer);
     }
 
     @FXML
@@ -602,7 +660,7 @@ public class MainController {
                 for (String depType : component.getInjectedDependencies()) {
                     if (depType == null || depType.trim().isEmpty()) continue;
                     String key = depType.trim();
-                    diMap.computeIfAbsent(key, k -> new java.util.ArrayList<>());
+                    diMap.computeIfAbsent(key, k -> new java.util.ArrayList<String>());
                     String className = component.getId() != null ? component.getId() : component.getName();
                     if (className != null && !diMap.get(key).contains(className)) {
                         diMap.get(key).add(className);
@@ -777,9 +835,14 @@ public class MainController {
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
 
         if (file != null) {
-            graphVisualizer.exportToPlantUML(file);
-            showInfoDialog("Export Successful", "PlantUML export complete",
-                    "The diagram has been exported to PlantUML format: " + file.getAbsolutePath());
+            try {
+                String plantUMLContent = new GraphExporter().exportToPlantUML(currentAnalysisResult);
+                Files.write(file.toPath(), plantUMLContent.getBytes());
+                showInfoDialog("Export Successful", "PlantUML export complete",
+                        "The diagram has been exported to PlantUML format: " + file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Export Error", "Failed to export PlantUML", e.getMessage());
+            }
         }
     }
 
@@ -796,11 +859,17 @@ public class MainController {
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
 
         if (file != null) {
-            graphVisualizer.exportToGraphviz(file);
-            showInfoDialog("Export Successful", "Graphviz export complete",
-                    "The diagram has been exported to Graphviz format: " + file.getAbsolutePath());
+            try {
+                String graphvizContent = new GraphExporter().exportToGraphviz(currentAnalysisResult);
+                Files.write(file.toPath(), graphvizContent.getBytes());
+                showInfoDialog("Export Successful", "Graphviz export complete",
+                        "The diagram has been exported to Graphviz format: " + file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Export Error", "Failed to export Graphviz", e.getMessage());
+            }
         }
     }
+
 
     @FXML
     private void handleCopyPlantUML() {
@@ -956,4 +1025,258 @@ public class MainController {
             }
         }
     }
+
+
+
+    private void setupEnhancedControls() {
+        // Setup abstraction level combo box
+        if (abstractionLevelComboBox != null) {
+            abstractionLevelComboBox.getItems().addAll(
+                    AbstractionLevel.HIGH_LEVEL.getDisplayName(),
+                    AbstractionLevel.COMPONENT_FLOW.getDisplayName(),
+                    AbstractionLevel.LAYERED_ARCHITECTURE.getDisplayName(),
+                    AbstractionLevel.FEATURE_BASED.getDisplayName(),
+                    AbstractionLevel.DETAILED.getDisplayName()
+            );
+            abstractionLevelComboBox.setValue(AbstractionLevel.HIGH_LEVEL.getDisplayName());
+
+            abstractionLevelComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+                updateAbstractionLevel(newVal);
+            });
+        }
+
+        // Setup configuration checkboxes
+        if (enableClusteringCheckBox != null) {
+            enableClusteringCheckBox.setSelected(visualizationConfig.isEnableClustering());
+            enableClusteringCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                visualizationConfig.setEnableClustering(newVal);
+                refreshGraph();
+            });
+        }
+
+        if (enableEdgeAggregationCheckBox != null) {
+            enableEdgeAggregationCheckBox.setSelected(visualizationConfig.isEnableEdgeAggregation());
+            enableEdgeAggregationCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                visualizationConfig.setEnableEdgeAggregation(newVal);
+                refreshGraph();
+            });
+        }
+
+        if (hideUtilityClassesCheckBox != null) {
+            hideUtilityClassesCheckBox.setSelected(visualizationConfig.isHideUtilityClasses());
+            hideUtilityClassesCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                visualizationConfig.setHideUtilityClasses(newVal);
+                refreshGraph();
+            });
+        }
+
+        if (hideTestClassesCheckBox != null) {
+            hideTestClassesCheckBox.setSelected(visualizationConfig.isHideTestClasses());
+            hideTestClassesCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                visualizationConfig.setHideTestClasses(newVal);
+                refreshGraph();
+            });
+        }
+
+        // Setup feature filter
+        if (featureFilterComboBox != null) {
+            featureFilterComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+                if ("All Features".equals(newVal)) {
+                    graphVisualizer.clearFilters();
+                } else {
+                    graphVisualizer.filterByFeature(newVal);
+                }
+            });
+        }
+
+        // Setup expand/collapse buttons
+        if (expandAllButton != null) {
+            expandAllButton.setOnAction(event -> expandAllNodes());
+        }
+        if (collapseAllButton != null) {
+            collapseAllButton.setOnAction(event -> collapseAllNodes());
+        }
+    }
+
+    private void updateAbstractionLevel(String levelDisplayName) {
+        for (AbstractionLevel level : AbstractionLevel.values()) {
+            if (level.getDisplayName().equals(levelDisplayName)) {
+                currentAbstractionLevel = level;
+                graphVisualizer.setAbstractionLevel(level);
+                refreshGraph();
+                break;
+            }
+        }
+    }
+
+    private void expandAllNodes() {
+        VisualizationGraph graph = graphVisualizer.getCurrentGraph();
+        if (graph != null) {
+            for (VisualizationNode node : graph.getAllNodes()) {
+                if (node.isExpandable()) {
+                    graph.expandNode(node.getId());
+                }
+            }
+            refreshGraph();
+        }
+    }
+
+    private void collapseAllNodes() {
+        VisualizationGraph graph = graphVisualizer.getCurrentGraph();
+        if (graph != null) {
+            for (VisualizationNode node : graph.getAllNodes()) {
+                if (node.isExpandable()) {
+                    graph.collapseNode(node.getId());
+                }
+            }
+            refreshGraph();
+        }
+    }
+
+    private void updateFeatureFilterOptions() {
+        if (featureFilterComboBox != null && currentAnalysisResult != null) {
+            featureFilterComboBox.getItems().clear();
+            featureFilterComboBox.getItems().add("All Features");
+
+            // Extract unique features from components
+            currentAnalysisResult.getComponents().stream()
+                    .map(this::inferFeatureFromComponent)
+                    .distinct()
+                    .sorted()
+                    .forEach(featureFilterComboBox.getItems()::add);
+
+            featureFilterComboBox.setValue("All Features");
+        }
+    }
+
+    private String inferFeatureFromComponent(CodeComponent component) {
+        String packagePath = component.getId();
+        String[] parts = packagePath.split("\\.");
+
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i].toLowerCase();
+            if (part.equals("feature") || part.equals("features")) {
+                if (i + 1 < parts.length) {
+                    return parts[i + 1];
+                }
+            }
+            if (part.matches("(login|auth|profile|dashboard|home|settings|payment|search|chat|notification)")) {
+                return part;
+            }
+        }
+
+        return "core";
+    }
+
+    private void updateExportTextAreas() {
+        if (graphVisualizer.getCurrentGraph() != null) {
+            // Use enhanced exporter for better output
+            String plantUMLContent = enhancedExporter.exportToPlantUML(graphVisualizer.getCurrentGraph());
+            String graphvizContent = enhancedExporter.exportToGraphviz(graphVisualizer.getCurrentGraph());
+
+            plantUMLTextArea.setText(plantUMLContent);
+            graphvizTextArea.setText(graphvizContent);
+        }
+    }
+
+    @FXML
+    private void handleNodeClick(String nodeId) {
+        graphVisualizer.toggleNodeExpansion(nodeId);
+    }
+
+
+    @FXML
+    private void handleExportEnhancedDiagram() {
+        if (currentAnalysisResult == null) {
+            showInfoDialog("Export", "No project loaded", "Please open a project first.");
+            return;
+        }
+
+        VisualizationGraph graph = graphVisualizer.getCurrentGraph();
+        if (graph == null) {
+            showInfoDialog("Export", "No visualization available", "Please create a visualization first.");
+            return;
+        }
+
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Export Enhanced Diagram");
+        dialog.setHeaderText("Choose export format:");
+
+        ButtonType plantUmlButton = new ButtonType("Enhanced PlantUML");
+        ButtonType graphvizButton = new ButtonType("Enhanced Graphviz");
+        ButtonType pngButton = new ButtonType("PNG Image");
+        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        dialog.getDialogPane().getButtonTypes().addAll(plantUmlButton, graphvizButton, pngButton, cancelButton);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == plantUmlButton) return "enhanced_puml";
+            if (dialogButton == graphvizButton) return "enhanced_dot";
+            if (dialogButton == pngButton) return "png";
+            return null;
+        });
+
+        java.util.Optional<String> result = dialog.showAndWait();
+        result.ifPresent(format -> {
+            switch (format) {
+                case "enhanced_puml":
+                    exportEnhancedPlantUML();
+                    break;
+                case "enhanced_dot":
+                    exportEnhancedGraphviz();
+                    break;
+                case "png":
+                    exportImage("png");
+                    break;
+            }
+        });
+    }
+
+    private void exportEnhancedPlantUML() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Enhanced PlantUML");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PlantUML Files", "*.puml"));
+
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+        if (file != null) {
+            try {
+                String content = enhancedExporter.exportToPlantUML(graphVisualizer.getCurrentGraph());
+                Files.write(file.toPath(), content.getBytes());
+                showInfoDialog("Export Successful", "Enhanced PlantUML exported",
+                        "File saved to: " + file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Export Error", "Failed to export enhanced PlantUML", e.getMessage());
+            }
+        }
+    }
+
+    private void exportEnhancedGraphviz() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Enhanced Graphviz");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Graphviz Files", "*.dot"));
+
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+        if (file != null) {
+            try {
+                String content = enhancedExporter.exportToGraphviz(graphVisualizer.getCurrentGraph());
+                Files.write(file.toPath(), content.getBytes());
+                showInfoDialog("Export Successful", "Enhanced Graphviz exported",
+                        "File saved to: " + file.getAbsolutePath());
+            } catch (IOException e) {
+                showErrorDialog("Export Error", "Failed to export enhanced Graphviz", e.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    private void handleLayerFilter() {
+        String selectedLayer = layerFilterComboBox.getValue();
+        if (!"All Layers".equals(selectedLayer)) {
+            graphVisualizer.filterByLayer(selectedLayer);
+        } else {
+            graphVisualizer.clearFilters();
+        }
+        refreshGraph();
+    }
+
 }

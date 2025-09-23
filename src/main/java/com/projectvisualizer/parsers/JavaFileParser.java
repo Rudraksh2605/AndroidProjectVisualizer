@@ -25,6 +25,8 @@ public class JavaFileParser {
     private Map<String, String> activityLayoutMap;
     private IntentAnalyzer intentAnalyzer = new IntentAnalyzer();
     private ScreenFlowDetector screenFlowDetector = new ScreenFlowDetector();
+    private static final DaggerHiltAnalyzer DAGGER_HILT_ANALYZER = new DaggerHiltAnalyzer();
+
 
     public JavaFileParser() {
         // Default constructor
@@ -36,6 +38,8 @@ public class JavaFileParser {
 
     public List<CodeComponent> parse(File javaFile) throws Exception {
         List<CodeComponent> components = new ArrayList<>();
+
+        // Reuse analyzer instances instead of creating new ones
         List<NavigationFlow> intentFlows = intentAnalyzer.analyzeIntentFlows(javaFile);
 
         try (FileInputStream in = new FileInputStream(javaFile)) {
@@ -47,16 +51,16 @@ public class JavaFileParser {
 
             cu.accept(new ClassVisitor(javaFile, packageName), components);
 
-            for (CodeComponent component : components) {
+            // Process all components in parallel for better performance
+            components.parallelStream().forEach(component -> {
                 cu.accept(new FieldVisitor(), component);
                 cu.accept(new MethodVisitor(), component);
                 cu.accept(new ConstructorVisitor(), component);
                 cu.accept(new AnnotationVisitor(), component);
 
-                // ADD DAGGER/HILT ANALYSIS HERE
-                DaggerHiltAnalyzer daggerHiltAnalyzer = new DaggerHiltAnalyzer();
-                daggerHiltAnalyzer.analyzeDaggerComponents(cu, component);
-                daggerHiltAnalyzer.analyzeHiltComponents(cu, component);
+                // Use static analyzer instance
+                DAGGER_HILT_ANALYZER.analyzeDaggerComponents(cu, component);
+                DAGGER_HILT_ANALYZER.analyzeHiltComponents(cu, component);
 
                 detectAndroidLayer(component);
 
@@ -64,14 +68,13 @@ public class JavaFileParser {
                     String fullClassName = packageName + "." + component.getName();
                     if (activityLayoutMap.containsKey(fullClassName)) {
                         component.setLayer("UI");
-                        // Try to find associated layout file
                         String layoutFile = findLayoutFileForActivity(javaFile, component.getName());
                         if (layoutFile != null) {
                             component.addLayoutFile(layoutFile);
                         }
                     }
                 }
-            }
+            });
         }
 
         return components;
