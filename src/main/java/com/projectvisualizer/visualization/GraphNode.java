@@ -2,6 +2,7 @@
 package com.projectvisualizer.visualization;
 
 import com.projectvisualizer.model.CodeComponent;
+import com.projectvisualizer.model.ExpansionMode;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.geometry.Pos;
@@ -30,23 +31,8 @@ public class GraphNode {
     private boolean expanded = false;
     private Pane canvas;
 
-    // Expansion mode: UI_COMPONENTS or CLASS_DEPENDENCIES
     private ExpansionMode expansionMode = ExpansionMode.CLASS_DEPENDENCIES;
 
-    public enum ExpansionMode {
-        UI_COMPONENTS("UI Components"),
-        CLASS_DEPENDENCIES("Class Dependencies");
-
-        private final String displayName;
-
-        ExpansionMode(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-    }
 
     public GraphNode(CodeComponent component, Pane canvas) {
         this.component = component;
@@ -62,7 +48,8 @@ public class GraphNode {
         nodeCircle.setStroke(Color.BLACK);
         nodeCircle.setStrokeWidth(1.5);
 
-        nodeLabel = new Text(component.getName());
+        // Use clean display name instead of raw component name
+        nodeLabel = new Text(getDisplayName());
         nodeLabel.setStyle("-fx-font-size: 11; -fx-font-weight: bold; -fx-text-alignment: center;");
         nodeLabel.setWrappingWidth(50);
 
@@ -241,6 +228,13 @@ public class GraphNode {
             }
         }
 
+        // Add intents
+        if (component.getIntents() != null) {
+            for (CodeComponent intent : component.getIntents()) {
+                uiComponents.add(intent);
+            }
+        }
+
         // Add UI resources like strings, dimensions, etc.
         if (component.getResourcesUsed() != null) {
             for (String resource : component.getResourcesUsed()) {
@@ -315,6 +309,7 @@ public class GraphNode {
                 resource.startsWith("@menu/") ||
                 resource.startsWith("@style/");
     }
+
     private List<CodeComponent> getClassDependencies() {
         List<CodeComponent> classDependencies = new ArrayList<>();
 
@@ -499,6 +494,7 @@ public class GraphNode {
 
         return isUIByName || isUIByExtends;
     }
+
     private void removeChildNodes() {
         // Remove connection lines
         for (Line line : connectionLines) {
@@ -579,40 +575,173 @@ public class GraphNode {
         }
     }
 
+
+    private String getDisplayName() {
+        if (component == null) return "Unknown";
+
+        String name = component.getName();
+        if (name == null) {
+            // Fallback to ID if name is null
+            name = component.getId();
+            if (name == null) return "Unknown";
+        }
+
+        // Special handling for navigation nodes
+        if (isIntentNode()) {
+            String cleanName = cleanDisplayName(name);
+            String target = extractTargetActivityFromIntent();
+
+            // Determine navigation type for display
+            String navType = getNavigationType();
+
+            if (target != null && !target.isEmpty()) {
+                return navType + " to " + cleanDisplayName(target);
+            } else {
+                // If no specific target found, use a more descriptive name
+                return createDescriptiveNavigationName(cleanName, navType);
+            }
+        }
+
+        return cleanDisplayName(name);
+    }
+
+    private String cleanDisplayName(String name) {
+        if (name == null) return "Unknown";
+
+        String cleaned = name.trim();
+
+        // Remove common navigation prefixes and suffixes
+        cleaned = cleaned.replaceAll("(?i)(action_|r\\.id\\.|navigate\\(|startactivity\\(|new\\s+)", "");
+
+        // Remove file extensions and common suffixes
+        cleaned = cleaned.replaceAll("\\.(java|kt|xml|class)$", "");
+        cleaned = cleaned.replaceAll("::class\\.java", "");
+        cleaned = cleaned.replaceAll("\\(\\)", "");
+
+        // Remove special characters but keep spaces, letters, numbers
+        cleaned = cleaned.replaceAll("[^a-zA-Z0-9\\s_]", " ");
+
+        // Replace underscores with spaces
+        cleaned = cleaned.replaceAll("_", " ");
+
+        // Replace multiple spaces with single space
+        cleaned = cleaned.replaceAll("\\s+", " ");
+
+        // Capitalize first letter of each word for better readability
+        cleaned = capitalizeWords(cleaned);
+
+        // Handle common abbreviations
+        cleaned = fixCommonAbbreviations(cleaned);
+
+        return cleaned.trim();
+    }
+
+    private String capitalizeWords(String text) {
+        if (text == null || text.isEmpty()) return text;
+
+        String[] words = text.split("\\s");
+        StringBuilder result = new StringBuilder();
+
+        for (String word : words) {
+            if (!word.isEmpty()) {
+                if (result.length() > 0) result.append(" ");
+                result.append(Character.toUpperCase(word.charAt(0)))
+                        .append(word.substring(1).toLowerCase());
+            }
+        }
+
+        return result.toString();
+    }
+
+    private String fixCommonAbbreviations(String text) {
+        if (text == null) return text;
+
+        return text.replaceAll("\\bFrag\\b", "Fragment")
+                .replaceAll("\\bAct\\b", "Activity")
+                .replaceAll("\\bActv\\b", "Activity")
+                .replaceAll("\\bFrg\\b", "Fragment")
+                .replaceAll("\\bVm\\b", "ViewModel")
+                .replaceAll("\\bRepo\\b", "Repository")
+                .replaceAll("\\bAdapter\\b", "Adapter")
+                .replaceAll("\\bImpl\\b", "Implementation")
+                .replaceAll("\\bInt\\b", "Intent")
+                .replaceAll("\\bNav\\b", "Navigation");
+    }
+
     private String createTooltipText() {
         StringBuilder sb = new StringBuilder();
-        sb.append("Name: ").append(component.getName() != null ? component.getName() : "Unknown").append("\n");
+        sb.append("Name: ").append(getDisplayName()).append("\n");
+
         String badge = component.getComponentType() != null ? component.getComponentType() : component.getType();
-        sb.append("Type: ").append(badge != null ? badge : "Unknown").append("\n");
+        sb.append("Type: ").append(badge != null ? cleanDisplayName(badge) : "Unknown").append("\n");
+
+        // Add navigation-specific information
+        if (isIntentNode()) {
+            String targetActivity = extractTargetActivityFromIntent();
+            String navType = getNavigationType();
+
+            sb.append("\n[NAVIGATION - ").append(navType).append("]");
+            if (targetActivity != null && !targetActivity.isEmpty()) {
+                sb.append("\nTarget: ").append(cleanDisplayName(targetActivity));
+            } else {
+                sb.append("\nTarget: Unknown");
+            }
+
+            // Add navigation method details
+            String methodDetails = getNavigationMethodDetails();
+            if (methodDetails != null) {
+                sb.append("\nMethod: ").append(methodDetails);
+            }
+
+            sb.append("\nClick to navigate to target");
+        }
+
+        // Add package info if available
         if (component.getPackageName() != null && !component.getPackageName().isEmpty()) {
             sb.append("Package: ").append(component.getPackageName()).append("\n");
         }
-        if (component.getModuleName() != null && !component.getModuleName().isEmpty()) {
-            sb.append("Module: ").append(component.getModuleName()).append("\n");
-        }
-        if (component.getFileExtension() != null && !component.getFileExtension().isEmpty()) {
-            sb.append("File: .").append(component.getFileExtension()).append("\n");
-        }
-        sb.append("Layer: ").append(component.getLayer() != null ? component.getLayer() : "Unknown").append("\n");
-        if (component.getLanguage() != null) {
-            sb.append("Language: ").append(component.getLanguage()).append("\n");
-        }
-        sb.append("Expansion Mode: ").append(expansionMode.getDisplayName()).append("\n");
-        sb.append("Dependencies: ").append(component.getDependencies() != null ? component.getDependencies().size() : 0).append("\n");
 
-        java.util.List<String> hints = new java.util.ArrayList<>();
-        if (component.isViewBindingUsed()) hints.add("ViewBinding");
-        if (component.isDataBindingUsed()) hints.add("DataBinding");
-        if (component.isCoroutineUsage()) hints.add("Coroutines");
-        if (component.getApiClients() != null && !component.getApiClients().isEmpty()) hints.add("API: " + String.join(",", component.getApiClients()));
-        if (component.getDbDaos() != null && !component.getDbDaos().isEmpty()) hints.add("DB: " + String.join(",", component.getDbDaos()));
-        if (component.getComposablesUsed() != null && !component.getComposablesUsed().isEmpty()) hints.add("Composables: " + component.getComposablesUsed().size());
-        if (component.getResourcesUsed() != null && !component.getResourcesUsed().isEmpty()) hints.add("Resources: " + component.getResourcesUsed().size());
-        if (!hints.isEmpty()) {
-            sb.append("\nHints: ").append(String.join(" | ", hints)).append("\n");
-        }
-        sb.append("\n").append(isUIComponent(component) ? "UI COMPONENT" : "Non-UI Component");
+        // Add layer info
+        sb.append("Layer: ").append(component.getLayer() != null ? component.getLayer() : "Unknown").append("\n");
+
         return sb.toString();
+    }
+
+    private String getNavigationType() {
+        String name = component.getName().toLowerCase();
+        String type = component.getType().toLowerCase();
+
+        if (name.contains("fragmenttransaction") || name.contains("replace") || name.contains("addtobackstack")) {
+            return "Fragment Transaction";
+        } else if (name.contains("navcontroller") || name.contains("findnavcontroller") || name.contains("action_")) {
+            return "Navigation Component";
+        } else if (name.contains("pendingintent")) {
+            return "Pending Intent";
+        } else if (name.contains("deeplink") || name.contains("action_view")) {
+            return "Deep Link";
+        } else if (name.contains("activityresult") || name.contains("registerforactivityresult")) {
+            return "Activity Result";
+        } else if (name.contains("compose") || name.contains("composable")) {
+            return "Compose Navigation";
+        } else if (name.contains("intent")) {
+            return "Intent";
+        } else {
+            return "Navigation";
+        }
+    }
+
+    private String getNavigationMethodDetails() {
+        String name = component.getName().toLowerCase();
+
+        if (name.contains("startactivity")) return "startActivity()";
+        if (name.contains("findnavcontroller")) return "NavController.navigate()";
+        if (name.contains("fragmenttransaction")) return "FragmentTransaction.replace()";
+        if (name.contains("pendingintent")) return "PendingIntent.getActivity()";
+        if (name.contains("activityresult")) return "Activity Result API";
+        if (name.contains("deeplink")) return "Deep Link (ACTION_VIEW)";
+        if (name.contains("compose")) return "Compose Navigation";
+
+        return "Intent Navigation";
     }
 
     public VBox getContainer() {
@@ -639,8 +768,12 @@ public class GraphNode {
     }
 
     private void setupEventHandlers() {
+        // Handle intent node clicks
         nodeCircle.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) {
+            if (event.getClickCount() == 1 && isIntentNode()) {
+                handleIntentNodeClick();
+                event.consume(); // Prevent double-click expansion for intent nodes
+            } else if (event.getClickCount() == 2) {
                 toggleExpansion();
             }
         });
@@ -677,6 +810,9 @@ public class GraphNode {
         Tooltip.install(expandArrow, arrowTooltip);
 
         nodeContainer.getChildren().add(expandArrow);
+
+        // Update tooltip to show intent information
+        updateIntentTooltip();
     }
 
     // Add this method to check for overlaps during drag
@@ -713,4 +849,652 @@ public class GraphNode {
         return false;
     }
 
+
+    private void handleIntentNodeClick() {
+        if (isIntentNode()) {
+            // Extract target activity from intent information
+            String targetActivity = extractTargetActivityFromIntent();
+            if (targetActivity != null && !targetActivity.isEmpty()) {
+                // Find or create the target activity component
+                CodeComponent targetComponent = findOrCreateTargetComponent(targetActivity);
+                if (targetComponent != null) {
+                    // Create and position the target activity node
+                    createTargetActivityNode(targetComponent);
+                }
+            }
+        }
+    }
+
+    private boolean isIntentNode() {
+        if (component == null) return false;
+
+        String type = component.getType();
+        String name = component.getName();
+
+        if (type == null || name == null) return false;
+
+        // Check type first
+        boolean isIntentType = type.equalsIgnoreCase("Intent") ||
+                type.toLowerCase().contains("intent") ||
+                type.equalsIgnoreCase("Navigation") ||
+                type.equalsIgnoreCase("FragmentTransaction") ||
+                type.equalsIgnoreCase("ActivityResult") ||
+                type.equalsIgnoreCase("PendingIntent") ||
+                type.equalsIgnoreCase("DeepLink") ||
+                type.equalsIgnoreCase("NavController") ||
+                type.equalsIgnoreCase("ComposeNavigation");
+
+        // Check name patterns for all navigation types
+        boolean isIntentName = name.toLowerCase().contains("intent") ||
+                name.toLowerCase().contains("navigate") ||
+                name.toLowerCase().contains("navigation") ||
+                name.toLowerCase().contains("launch") ||
+                name.toLowerCase().contains("open") ||
+                name.toLowerCase().contains("start") ||
+                name.toLowerCase().contains("goto") ||
+                name.toLowerCase().contains("goTo") ||
+                name.toLowerCase().contains("findnavcontroller") ||
+                name.toLowerCase().contains("navcontroller") ||
+                name.toLowerCase().contains("fragmenttransaction") ||
+                name.toLowerCase().contains("replace") ||
+                name.toLowerCase().contains("addtobackstack") ||
+                name.toLowerCase().contains("pendingintent") ||
+                name.toLowerCase().contains("deeplink") ||
+                name.toLowerCase().contains("activityresult") ||
+                name.toLowerCase().contains("registerforactivityresult") ||
+                name.toLowerCase().contains("composenavigation") ||
+                (name.toLowerCase().contains("action_") && name.toLowerCase().contains("to_")) ||
+                name.toLowerCase().contains("r.id.action_");
+
+        return isIntentType || isIntentName;
+    }
+
+    private String extractTargetActivityFromIntent() {
+        if (component == null || component.getName() == null) return null;
+
+        String name = component.getName();
+        String originalName = name; // Keep original for fallback
+
+        // Method 1: Check if intent has explicit target in dependencies
+        if (component.getDependencies() != null && !component.getDependencies().isEmpty()) {
+            for (CodeComponent dep : component.getDependencies()) {
+                if (dep != null && isTargetComponent(dep)) {
+                    String targetName = extractMeaningfulName(dep.getName());
+                    if (isValidTargetName(targetName)) {
+                        return targetName;
+                    }
+                }
+            }
+        }
+
+        // Method 2: Parse Navigation Component patterns
+        String navTarget = extractNavigationComponentTarget(name);
+        if (isValidTargetName(navTarget)) return navTarget;
+
+        // Method 3: Parse Fragment Transaction patterns
+        String fragmentTarget = extractFragmentTransactionTarget(name);
+        if (isValidTargetName(fragmentTarget)) return fragmentTarget;
+
+        // Method 4: Parse Activity Intent patterns
+        String activityTarget = extractActivityIntentTarget(name);
+        if (isValidTargetName(activityTarget)) return activityTarget;
+
+        // Method 5: Parse Compose Navigation patterns
+        String composeTarget = extractComposeNavigationTarget(name);
+        if (isValidTargetName(composeTarget)) return composeTarget;
+
+        // Method 6: Enhanced pattern matching from component name
+        String patternTarget = extractFromCommonPatterns(name);
+        if (isValidTargetName(patternTarget)) return patternTarget;
+
+        // Method 7: Extract from component properties
+        String propertyTarget = getComponentProperty("targetActivity");
+        if (isValidTargetName(propertyTarget)) return propertyTarget;
+
+        // Final fallback: Try to extract any meaningful name from the original name
+        String fallbackTarget = extractAnyMeaningfulName(originalName);
+        if (fallbackTarget != null && !fallbackTarget.equals("TargetScreen")) {
+            return fallbackTarget;
+        }
+
+        return null; // Return null instead of "TargetScreen" to avoid generic names
+    }
+
+    private String extractFromCommonPatterns(String name) {
+        if (name == null) return null;
+
+        // Pattern 1: navigateToXxx, goToXxx, openXxx, launchXxx
+        String[] prefixes = {"navigateTo", "goTo", "open", "launch", "start", "show"};
+        for (String prefix : prefixes) {
+            if (name.toLowerCase().contains(prefix.toLowerCase())) {
+                int index = name.toLowerCase().indexOf(prefix.toLowerCase());
+                String afterPrefix = name.substring(index + prefix.length());
+                String target = extractFirstMeaningfulWord(afterPrefix);
+                if (target != null) {
+                    return formatTargetName(target);
+                }
+            }
+        }
+
+        // Pattern 2: xxxIntent, xxxNavigation
+        String[] suffixes = {"Intent", "Navigation", "Navigate", "Nav"};
+        for (String suffix : suffixes) {
+            if (name.endsWith(suffix) && name.length() > suffix.length()) {
+                String beforeSuffix = name.substring(0, name.length() - suffix.length());
+                String target = extractFirstMeaningfulWord(beforeSuffix);
+                if (target != null) {
+                    return formatTargetName(target);
+                }
+            }
+        }
+
+        // Pattern 3: action_xxx_to_yyy (Navigation Component)
+        if (name.contains("action_") && name.contains("_to_")) {
+            String[] parts = name.split("_to_");
+            if (parts.length > 1) {
+                String targetPart = parts[1];
+                // Remove any remaining underscores or parameters
+                targetPart = targetPart.split("[_\\[\\]()]")[0];
+                return formatTargetName(targetPart);
+            }
+        }
+
+        // Pattern 4: R.id.action_xxx_to_yyy
+        if (name.contains("R.id.action_") && name.contains("_to_")) {
+            String targetPart = name.replaceAll(".*_to_", "");
+            targetPart = targetPart.split("[^a-zA-Z]")[0];
+            return formatTargetName(targetPart);
+        }
+
+        return null;
+    }
+
+
+    private boolean isTargetComponent(CodeComponent component) {
+        if (component == null) return false;
+
+        String type = component.getType();
+        String name = component.getName();
+
+        if (type == null || name == null) return false;
+
+        return type.equals("Activity") ||
+                type.equals("Fragment") ||
+                type.equals("Composable") ||
+                type.equals("Screen") ||
+                type.equals("Destination") ||
+                name.toLowerCase().contains("activity") ||
+                name.toLowerCase().contains("fragment") ||
+                name.toLowerCase().contains("composable") ||
+                name.toLowerCase().contains("screen");
+    }
+
+    private String extractNavigationComponentTarget(String cleanName) {
+        // Pattern: action_current_to_target
+        if (cleanName.toLowerCase().contains("action_")) {
+            String[] parts = cleanName.split("_");
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].equalsIgnoreCase("to") && i + 1 < parts.length) {
+                    return capitalizeWords(parts[i + 1]) + "Fragment";
+                }
+            }
+        }
+
+        // Pattern: R.id.action_homeFragment_to_detailsFragment
+        if (cleanName.toLowerCase().contains("r.id.action_")) {
+            String[] parts = cleanName.split("_");
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].equalsIgnoreCase("to") && i + 1 < parts.length) {
+                    return capitalizeWords(parts[i + 1]);
+                }
+            }
+        }
+
+        // Pattern: navigate(R.id.action_profile)
+        if (cleanName.toLowerCase().contains("navigate(r.id.")) {
+            String target = cleanName.replaceAll(".*navigate\\(r\\.id\\.(action_)?", "")
+                    .replaceAll("[^a-zA-Z].*", "");
+            if (!target.isEmpty()) {
+                return extractTargetFromActionId(target);
+            }
+        }
+
+        return null;
+    }
+
+    private String extractFragmentTransactionTarget(String cleanName) {
+        // Pattern: replace(R.id.container, new NextFragment())
+        if (cleanName.toLowerCase().contains("replace") &&
+                cleanName.toLowerCase().contains("new ")) {
+            String target = cleanName.replaceAll(".*new\\s+", "")
+                    .replaceAll("\\(.*", "")
+                    .replaceAll("[^a-zA-Z].*", "");
+            if (!target.isEmpty() && target.toLowerCase().contains("fragment")) {
+                return target;
+            }
+        }
+
+        // Pattern: NextFragment() in transaction
+        if (cleanName.toLowerCase().contains("fragment") &&
+                cleanName.contains("(") && cleanName.contains(")")) {
+            String target = cleanName.replaceAll(".*\\b([A-Z][a-zA-Z]*Fragment)\\(.*", "$1");
+            if (!target.equals(cleanName) && target.toLowerCase().contains("fragment")) {
+                return target;
+            }
+        }
+
+        return null;
+    }
+
+    private String extractActivityIntentTarget(String cleanName) {
+        // Pattern: Intent(this, NextActivity.class)
+        if (cleanName.toLowerCase().contains("intent") &&
+                cleanName.contains(",")) {
+            String target = cleanName.replaceAll(".*,\\s*", "")
+                    .replaceAll("\\.class.*", "")
+                    .replaceAll("::class.*", "")
+                    .trim();
+            if (!target.isEmpty() && !target.equals(cleanName)) {
+                return target;
+            }
+        }
+
+        // Pattern: common navigation prefixes
+        String[] patterns = {
+                "To", "NavigateTo", "Open", "Launch", "Start", "Goto", "GoTo",
+                "Action", "Destination", "Screen", "Route"
+        };
+
+        for (String pattern : patterns) {
+            if (cleanName.contains(pattern)) {
+                String[] parts = cleanName.split(pattern);
+                if (parts.length > 1 && !parts[1].trim().isEmpty()) {
+                    String target = parts[1].trim();
+                    // Clean up the target
+                    target = target.replaceAll("[^a-zA-Z0-9].*", "");
+                    if (!target.isEmpty()) {
+                        // Add appropriate suffix if missing
+                        if (!target.toLowerCase().contains("activity") &&
+                                !target.toLowerCase().contains("fragment") &&
+                                !target.toLowerCase().contains("composable")) {
+                            target += "Activity"; // Default to Activity
+                        }
+                        return target;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private String extractComposeNavigationTarget(String cleanName) {
+        // Pattern: navController.navigate("details")
+        if (cleanName.toLowerCase().contains("navigate(\"")) {
+            String target = cleanName.replaceAll(".*navigate\\(\"", "")
+                    .replaceAll("\".*", "");
+            if (!target.isEmpty()) {
+                return capitalizeWords(target) + "Screen";
+            }
+        }
+
+        // Pattern: composable("details")
+        if (cleanName.toLowerCase().contains("composable(\"")) {
+            String target = cleanName.replaceAll(".*composable\\(\"", "")
+                    .replaceAll("\".*", "");
+            if (!target.isEmpty()) {
+                return capitalizeWords(target) + "Screen";
+            }
+        }
+
+        return null;
+    }
+
+    private String extractTargetFromActionId(String actionId) {
+        if (actionId == null) return null;
+
+        String cleanAction = actionId.replace("action_", "");
+        String[] parts = cleanAction.split("_");
+
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].equals("to") && i + 1 < parts.length) {
+                return capitalizeWords(parts[i + 1]);
+            }
+        }
+
+        // If no "to" found, use the last part
+        if (parts.length > 0) {
+            return capitalizeWords(parts[parts.length - 1]);
+        }
+
+        return null;
+    }
+
+    private String extractFallbackTarget(String cleanName) {
+        // Common activity patterns
+        if (cleanName.toLowerCase().contains("main")) return "MainActivity";
+        if (cleanName.toLowerCase().contains("login")) return "LoginActivity";
+        if (cleanName.toLowerCase().contains("home")) return "HomeActivity";
+        if (cleanName.toLowerCase().contains("profile")) return "ProfileActivity";
+        if (cleanName.toLowerCase().contains("settings")) return "SettingsActivity";
+        if (cleanName.toLowerCase().contains("detail")) return "DetailActivity";
+        if (cleanName.toLowerCase().contains("dashboard")) return "DashboardActivity";
+        if (cleanName.toLowerCase().contains("splash")) return "SplashActivity";
+
+        // Common fragment patterns
+        if (cleanName.toLowerCase().contains("list")) return "ListFragment";
+        if (cleanName.toLowerCase().contains("detail")) return "DetailFragment";
+        if (cleanName.toLowerCase().contains("profile")) return "ProfileFragment";
+        if (cleanName.toLowerCase().contains("settings")) return "SettingsFragment";
+
+        // Generic fallback
+        if (cleanName.toLowerCase().contains("activity")) {
+            return cleanName.replace("Intent", "")
+                    .replace("Navigation", "")
+                    .replace("Navigate", "")
+                    .trim();
+        }
+
+        return "TargetScreen";
+    }
+
+    private CodeComponent findOrCreateTargetComponent(String targetActivity) {
+        // First, try to find existing component in the graph manager
+        if (canvas.getUserData() instanceof GraphManager) {
+            GraphManager graphManager = (GraphManager) canvas.getUserData();
+            if (graphManager.containsNode(targetActivity)) {
+                return graphManager.getNodeMap().get(targetActivity).getComponent();
+            }
+
+            // Also try to find by name pattern
+            for (GraphNode existingNode : graphManager.getNodeMap().values()) {
+                CodeComponent existingComponent = existingNode.getComponent();
+                if (existingComponent.getName() != null &&
+                        existingComponent.getName().equalsIgnoreCase(targetActivity)) {
+                    return existingComponent;
+                }
+            }
+        }
+
+        // Create a new target activity component
+        CodeComponent targetComponent = new CodeComponent();
+        targetComponent.setId("activity:" + targetActivity);
+        targetComponent.setName(targetActivity);
+        targetComponent.setType("Activity");
+        targetComponent.setLayer("UI");
+
+        // Set additional properties based on common Android patterns
+        if (targetActivity.toLowerCase().contains("activity")) {
+            targetComponent.setLanguage("Java");
+            targetComponent.setComponentType("Activity");
+        } else if (targetActivity.toLowerCase().contains("fragment")) {
+            targetComponent.setComponentType("Fragment");
+        }
+
+        return targetComponent;
+    }
+
+    private void createTargetActivityNode(CodeComponent targetComponent) {
+        GraphNode targetNode = new GraphNode(targetComponent, canvas);
+
+        // Position the target node relative to the intent node
+        double intentX = nodeContainer.getLayoutX();
+        double intentY = nodeContainer.getLayoutY();
+
+        // Position target to the right of the intent node with some offset
+        double targetX = intentX + 200;
+        double targetY = intentY;
+
+        targetNode.getContainer().setLayoutX(targetX);
+        targetNode.getContainer().setLayoutY(targetY);
+
+        // Create connection from intent to target
+        Line intentConnection = createIntentConnectionLine(nodeContainer, targetNode.getContainer());
+        connectionLines.add(intentConnection);
+        canvas.getChildren().add(intentConnection);
+
+        // Add target node to canvas
+        canvas.getChildren().add(targetNode.getContainer());
+        children.add(targetNode);
+
+        // Animate the appearance
+        animateTargetNodeAppearance(targetNode);
+    }
+
+    private Line createIntentConnectionLine(VBox source, VBox target) {
+        Line line = new Line();
+
+        line.startXProperty().bind(source.layoutXProperty().add(source.widthProperty().divide(2)));
+        line.startYProperty().bind(source.layoutYProperty().add(source.heightProperty().divide(2)));
+        line.endXProperty().bind(target.layoutXProperty().add(target.widthProperty().divide(2)));
+        line.endYProperty().bind(target.layoutYProperty().add(target.heightProperty().divide(2)));
+
+        // Style for intent connections - different from regular connections
+        line.setStroke(Color.DARKORANGE);
+        line.setStrokeWidth(3);
+        line.getStrokeDashArray().addAll(5.0, 5.0); // Dashed line for navigation
+
+        // Add arrow head effect
+        line.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+
+        return line;
+    }
+
+    private void animateTargetNodeAppearance(GraphNode targetNode) {
+        VBox targetContainer = targetNode.getContainer();
+
+        // Scale animation
+        ScaleTransition scaleTransition = new ScaleTransition(Duration.millis(500), targetContainer);
+        scaleTransition.setFromX(0.1);
+        scaleTransition.setFromY(0.1);
+        scaleTransition.setToX(1.0);
+        scaleTransition.setToY(1.0);
+
+        // Fade animation
+        FadeTransition fadeTransition = new FadeTransition(Duration.millis(500), targetContainer);
+        fadeTransition.setFromValue(0.0);
+        fadeTransition.setToValue(1.0);
+
+        // Pulse animation to highlight the new node
+        ScaleTransition pulseTransition = new ScaleTransition(Duration.millis(300), targetContainer);
+        pulseTransition.setFromX(1.0);
+        pulseTransition.setFromY(1.0);
+        pulseTransition.setToX(1.2);
+        pulseTransition.setToY(1.2);
+        pulseTransition.setAutoReverse(true);
+        pulseTransition.setCycleCount(2);
+
+        // Play animations in sequence
+        javafx.animation.SequentialTransition sequentialTransition =
+                new javafx.animation.SequentialTransition(scaleTransition, pulseTransition);
+        javafx.animation.ParallelTransition parallelTransition =
+                new javafx.animation.ParallelTransition(sequentialTransition, fadeTransition);
+        parallelTransition.play();
+    }
+
+    private void updateIntentTooltip() {
+        if (isIntentNode()) {
+            String targetActivity = extractTargetActivityFromIntent();
+            if (targetActivity != null) {
+                Tooltip tooltip = new Tooltip("Intent Navigation\nTarget: " + targetActivity +
+                        "\nClick to navigate to target activity");
+                Tooltip.install(nodeContainer, tooltip);
+            }
+        }
+    }
+
+
+    private String getComponentProperty(String propertyName) {
+        if (component == null) return null;
+
+        String name = component.getName();
+        String type = component.getType();
+
+        if (name == null) return null;
+
+        switch (propertyName) {
+            case "targetActivity":
+                // Look for common target activity patterns in the name
+                if (name.contains("To") || name.contains("Navigate")) {
+                    String[] parts = name.split("To|Navigate");
+                    if (parts.length > 1) {
+                        return parts[1].replace("Intent", "")
+                                .replace("Navigation", "")
+                                .trim();
+                    }
+                }
+                break;
+
+            case "navigationDestination":
+                // Extract destination from navigation patterns
+                if (name.contains("action_")) {
+                    String[] parts = name.split("_");
+                    for (int i = 0; i < parts.length; i++) {
+                        if ("to".equals(parts[i]) && i + 1 < parts.length) {
+                            return parts[i + 1];
+                        }
+                    }
+                }
+                break;
+        }
+
+        return null;
+    }
+
+    private String extractFirstMeaningfulWord(String text) {
+        if (text == null || text.trim().isEmpty()) return null;
+
+        // Remove common prefixes and non-word characters
+        text = text.replaceAll("^[^a-zA-Z]*", ""); // Remove leading non-letters
+
+        // Split by non-word characters and take the first part
+        String[] words = text.split("[^a-zA-Z0-9]");
+        if (words.length > 0 && !words[0].isEmpty()) {
+            String word = words[0];
+            // Skip very short or common words
+            if (word.length() > 2 && !isCommonWord(word)) {
+                return word;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isCommonWord(String word) {
+        if (word == null) return true;
+        String lower = word.toLowerCase();
+        return lower.equals("the") || lower.equals("and") || lower.equals("or") ||
+                lower.equals("to") || lower.equals("from") || lower.equals("with") ||
+                lower.equals("for") || lower.equals("this") || lower.equals("that");
+    }
+
+    private String formatTargetName(String baseName) {
+        if (baseName == null || baseName.isEmpty()) return null;
+
+        // Capitalize first letter
+        String formatted = baseName.substring(0, 1).toUpperCase() +
+                baseName.substring(1).toLowerCase();
+
+        // Add appropriate suffix if missing
+        if (!formatted.toLowerCase().endsWith("activity") &&
+                !formatted.toLowerCase().endsWith("fragment") &&
+                !formatted.toLowerCase().endsWith("screen") &&
+                !formatted.toLowerCase().endsWith("composable")) {
+
+            // Default to Activity for now, but we could be smarter based on context
+            formatted += "Activity";
+        }
+
+        return formatted;
+    }
+
+    private String extractAnyMeaningfulName(String name) {
+        if (name == null) return null;
+
+        // Look for camelCase words or PascalCase words
+        String[] words = name.split("(?<=[a-z])(?=[A-Z])|[_\\s]+");
+
+        for (String word : words) {
+            if (word.length() > 3 && !isCommonWord(word) &&
+                    !word.equalsIgnoreCase("intent") &&
+                    !word.equalsIgnoreCase("navigation") &&
+                    !word.equalsIgnoreCase("navigate") &&
+                    !word.equalsIgnoreCase("open") &&
+                    !word.equalsIgnoreCase("launch")) {
+
+                String candidate = formatTargetName(word);
+                if (isValidTargetName(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private String extractMeaningfulName(String name) {
+        if (name == null) return null;
+
+        // Remove common prefixes and file extensions
+        name = name.replaceAll("^(R\\.id\\.|R\\.string\\.|@string/|@id/|action_|navigate|goTo|open|launch)", "")
+                .replaceAll("\\.(java|kt|class|xml)$", "")
+                .replaceAll("::class.*", "");
+
+        // Extract the most meaningful part (usually the last segment)
+        String[] parts = name.split("[./_]");
+        if (parts.length > 0) {
+            String lastPart = parts[parts.length - 1];
+            if (isValidTargetName(lastPart)) {
+                return formatTargetName(lastPart);
+            }
+        }
+
+        return formatTargetName(name);
+    }
+
+    /**
+     * Check if a target name is valid and meaningful
+     */
+    private boolean isValidTargetName(String name) {
+        if (name == null || name.isEmpty() || name.equals("TargetScreen")) {
+            return false;
+        }
+
+        // Should not be too short
+        if (name.length() < 3) return false;
+
+        // Should not contain common navigation words
+        String lower = name.toLowerCase();
+        return !lower.contains("intent") &&
+                !lower.contains("navigation") &&
+                !lower.contains("navigate") &&
+                !lower.contains("open") &&
+                !lower.contains("launch") &&
+                !lower.contains("start") &&
+                !lower.contains("goto");
+    }
+
+    private String createDescriptiveNavigationName(String cleanName, String navType) {
+        // Extract any meaningful words from the name
+        String meaningfulPart = extractAnyMeaningfulName(cleanName);
+        if (meaningfulPart != null && !meaningfulPart.equals("TargetScreen")) {
+            return navType + ": " + meaningfulPart;
+        }
+
+        // Fallback to cleaned name without generic terms
+        String descriptiveName = cleanName.replace("Intent", "")
+                .replace("intent", "")
+                .replace("Navigation", "")
+                .replace("navigation", "")
+                .replace("navigate", "")
+                .replace("launch", "")
+                .replace("start", "")
+                .trim();
+
+        if (!descriptiveName.isEmpty()) {
+            return navType + ": " + descriptiveName;
+        }
+
+        return navType;
+    }
 }

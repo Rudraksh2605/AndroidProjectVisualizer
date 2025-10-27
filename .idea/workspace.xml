@@ -6,7 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="96e75262-d0be-4199-aeba-7ace1778131c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeComponent.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeComponent.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphManager.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphNode.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphNode.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -41,8 +42,8 @@
       <list>
         <option value="FxmlFile" />
         <option value="CSS File" />
-        <option value="Enum" />
         <option value="Class" />
+        <option value="Enum" />
       </list>
     </option>
   </component>
@@ -73,6 +74,7 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultAutoModeForALLUsers.v1&quot;: &quot;true&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;master&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
@@ -217,7 +219,10 @@
       <workItem from="1761242424903" duration="942000" />
       <workItem from="1761284325718" duration="5112000" />
       <workItem from="1761309038168" duration="12474000" />
-      <workItem from="1761539222863" duration="7304000" />
+      <workItem from="1761539222863" duration="8731000" />
+      <workItem from="1761553458340" duration="809000" />
+      <workItem from="1761554288034" duration="987000" />
+      <workItem from="1761556047887" duration="3009000" />
     </task>
     <servers />
   </component>

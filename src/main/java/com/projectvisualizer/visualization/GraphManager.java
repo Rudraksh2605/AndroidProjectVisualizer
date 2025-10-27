@@ -35,6 +35,9 @@ public class GraphManager {
             viewportHeight = newVal.doubleValue();
             checkCanvasExpansion();
         });
+
+        setCanvasUserData();
+
     }
 
     public void addComponentToGraph(CodeComponent component) {
@@ -209,5 +212,9 @@ public class GraphManager {
 
     public int getNodeCount() {
         return nodeMap.size();
+    }
+
+    public void setCanvasUserData() {
+        canvas.setUserData(this);
     }
 }

@@ -14,6 +14,7 @@ public class CodeComponent {
     private List<String> implementsList;
     private List<String> annotations;
     private List<CodeField> fields;
+    private List<CodeComponent> intents;
     private List<CodeMethod> methods;
     private List<CodeComponent> dependencies;
     private List<String> injectedDependencies;
@@ -226,5 +227,20 @@ public class CodeComponent {
 
     public void addResourceUsage(String res) {
         this.resourcesUsed.add(res);
+    }
+
+    public List<CodeComponent> getIntents() {
+        if (intents == null) {
+            intents = new ArrayList<>();
+        }
+        return intents;
+    }
+
+    public void setIntents(List<CodeComponent> intents) {
+        this.intents = intents;
+    }
+
+    public void addIntent(CodeComponent intent) {
+        getIntents().add(intent);
     }
 }
