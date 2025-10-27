@@ -182,6 +182,8 @@ public class GraphNode {
         List<CodeComponent> childComponents = getChildComponents();
 
         if (childComponents.isEmpty()) {
+            // If no child components found, show a message or handle gracefully
+            System.out.println("No child components found for " + component.getName() + " in mode: " + expansionMode);
             return;
         }
 
@@ -229,19 +231,32 @@ public class GraphNode {
     private List<CodeComponent> getUIComponents() {
         List<CodeComponent> uiComponents = new ArrayList<>();
 
-        // Add UI resources like strings, dimensions, etc.
-        if (component.getResourcesUsed() != null) {
-            for (String resource : component.getResourcesUsed()) {
-                CodeComponent resourceComponent = new CodeComponent();
-                resourceComponent.setId("resource:" + resource);
-                resourceComponent.setName(resource);
-                resourceComponent.setType("Resource");
-                resourceComponent.setLayer("UI");
-                uiComponents.add(resourceComponent);
+        // First, add actual Android UI components from dependencies
+        if (component.getDependencies() != null) {
+            for (CodeComponent dep : component.getDependencies()) {
+                // Only include actual UI components in UI expansion mode
+                if (isUIComponent(dep) || isAndroidUIComponent(dep)) {
+                    uiComponents.add(dep);
+                }
             }
         }
 
-        // Add composables if available
+        // Add UI resources like strings, dimensions, etc.
+        if (component.getResourcesUsed() != null) {
+            for (String resource : component.getResourcesUsed()) {
+                // Only add actual UI resources, not class dependencies
+                if (isUIResource(resource)) {
+                    CodeComponent resourceComponent = new CodeComponent();
+                    resourceComponent.setId("resource:" + resource);
+                    resourceComponent.setName(resource);
+                    resourceComponent.setType("Resource");
+                    resourceComponent.setLayer("UI");
+                    uiComponents.add(resourceComponent);
+                }
+            }
+        }
+
+        // Add composables if available (Kotlin specific)
         if (component.getComposablesUsed() != null) {
             for (String composable : component.getComposablesUsed()) {
                 CodeComponent composableComponent = new CodeComponent();
@@ -273,42 +288,217 @@ public class GraphNode {
             uiComponents.add(dataBindingComponent);
         }
 
+        // Add layout files if this is a UI component
+        if (isUIComponent(component) && component.getFilePath() != null) {
+            String filePath = component.getFilePath();
+            if (filePath.endsWith(".xml") && filePath.contains("layout")) {
+                CodeComponent layoutComponent = new CodeComponent();
+                layoutComponent.setId("layout:" + component.getId());
+                layoutComponent.setName(filePath.substring(filePath.lastIndexOf("/") + 1));
+                layoutComponent.setType("Layout");
+                layoutComponent.setLayer("UI");
+                uiComponents.add(layoutComponent);
+            }
+        }
+
         return uiComponents;
     }
 
+    private boolean isUIResource(String resource) {
+        if (resource == null) return false;
+        return resource.startsWith("@string/") ||
+                resource.startsWith("@dimen/") ||
+                resource.startsWith("@color/") ||
+                resource.startsWith("@drawable/") ||
+                resource.startsWith("@mipmap/") ||
+                resource.startsWith("@layout/") ||
+                resource.startsWith("@menu/") ||
+                resource.startsWith("@style/");
+    }
     private List<CodeComponent> getClassDependencies() {
         List<CodeComponent> classDependencies = new ArrayList<>();
 
-        // Add regular dependencies
+        // Add regular dependencies (only actual class dependencies, not UI components)
         if (component.getDependencies() != null) {
-            classDependencies.addAll(component.getDependencies());
+            for (CodeComponent dep : component.getDependencies()) {
+                // Filter out UI components from class dependencies
+                if (!isUIComponent(dep) && !isAndroidUIComponent(dep)) {
+                    classDependencies.add(dep);
+                }
+            }
         }
 
-        // Add extended class if available
+        // Add extended class if available (only if it's not a UI component)
         if (component.getExtendsClass() != null && !component.getExtendsClass().isEmpty()) {
-            CodeComponent extendsComponent = new CodeComponent();
-            extendsComponent.setId("extends:" + component.getExtendsClass());
-            extendsComponent.setName(component.getExtendsClass());
-            extendsComponent.setType("Parent Class");
-            extendsComponent.setLayer("Inheritance");
-            classDependencies.add(extendsComponent);
+            if (!isAndroidUIComponentByName(component.getExtendsClass())) {
+                CodeComponent extendsComponent = new CodeComponent();
+                extendsComponent.setId("extends:" + component.getExtendsClass());
+                extendsComponent.setName(component.getExtendsClass());
+                extendsComponent.setType("Parent Class");
+                extendsComponent.setLayer("Inheritance");
+                classDependencies.add(extendsComponent);
+            }
         }
 
         // Add implemented interfaces if available
         if (component.getImplementsList() != null) {
             for (String interfaceName : component.getImplementsList()) {
-                CodeComponent interfaceComponent = new CodeComponent();
-                interfaceComponent.setId("implements:" + interfaceName);
-                interfaceComponent.setName(interfaceName);
-                interfaceComponent.setType("Interface");
-                interfaceComponent.setLayer("Inheritance");
-                classDependencies.add(interfaceComponent);
+                if (!isAndroidUIComponentByName(interfaceName)) {
+                    CodeComponent interfaceComponent = new CodeComponent();
+                    interfaceComponent.setId("implements:" + interfaceName);
+                    interfaceComponent.setName(interfaceName);
+                    interfaceComponent.setType("Interface");
+                    interfaceComponent.setLayer("Inheritance");
+                    classDependencies.add(interfaceComponent);
+                }
             }
         }
 
         return classDependencies;
     }
 
+    // Helper method to detect Android UI components by name
+    private boolean isAndroidUIComponentByName(String className) {
+        if (className == null) return false;
+
+        String lowerName = className.toLowerCase();
+
+        // Common Android UI classes that should NOT appear in class dependencies
+        return lowerName.contains("button") ||
+                lowerName.contains("textview") ||
+                lowerName.contains("edittext") ||
+                lowerName.contains("imageview") ||
+                lowerName.contains("recyclerview") ||
+                lowerName.contains("listview") ||
+                lowerName.contains("cardview") ||
+                lowerName.contains("constraintlayout") ||
+                lowerName.contains("linearlayout") ||
+                lowerName.contains("relativelayout") ||
+                lowerName.contains("framelayout") ||
+                lowerName.contains("scrollview") ||
+                lowerName.contains("viewpager") ||
+                lowerName.contains("tablayout") ||
+                lowerName.contains("navigationview") ||
+                lowerName.contains("drawerlayout") ||
+                lowerName.contains("coordinatorlayout") ||
+                lowerName.contains("appbarlayout") ||
+                lowerName.contains("floatingactionbutton") ||
+                lowerName.contains("snackbar") ||
+                lowerName.contains("bottomnavigationview") ||
+                lowerName.contains("toolbar") ||
+                lowerName.contains("actionbar") ||
+                lowerName.contains("menu") ||
+                lowerName.contains("menuitem") ||
+                lowerName.contains("dialog") ||
+                lowerName.contains("alertdialog") ||
+                lowerName.contains("progressbar") ||
+                lowerName.contains("seekbar") ||
+                lowerName.contains("switch") ||
+                lowerName.contains("checkbox") ||
+                lowerName.contains("radiobutton") ||
+                lowerName.contains("spinner") ||
+                lowerName.contains("webview") ||
+                lowerName.contains("mapview") ||
+                lowerName.contains("surfaceview") ||
+                lowerName.contains("textureview") ||
+                lowerName.contains("calendarview") ||
+                lowerName.contains("datepicker") ||
+                lowerName.contains("timepicker") ||
+                lowerName.contains("numberpicker") ||
+                lowerName.contains("ratingbar") ||
+                lowerName.contains("searchview") ||
+                lowerName.contains("videoview");
+    }
+
+    private boolean isAndroidUIComponent(CodeComponent component) {
+        if (component == null) return false;
+
+        // Check if it's a known Android UI component
+        if (isAndroidUIComponentByName(component.getName())) {
+            return true;
+        }
+
+        // Check package name for Android UI components
+        String packageName = component.getPackageName();
+        if (packageName != null) {
+            return packageName.startsWith("android.") ||
+                    packageName.startsWith("androidx.") ||
+                    packageName.contains(".widget.") ||
+                    packageName.contains(".view.") ||
+                    packageName.contains(".custom.");
+        }
+
+        // Check file path for Android resources
+        String filePath = component.getFilePath();
+        if (filePath != null) {
+            return filePath.contains("/res/") ||
+                    filePath.contains("/layout/") ||
+                    filePath.contains("/drawable/") ||
+                    filePath.contains("/menu/") ||
+                    filePath.contains("/values/");
+        }
+
+        return false;
+    }
+
+    // Enhanced UI component detection for both Java and Kotlin
+    private boolean isUIComponent(CodeComponent component) {
+        if (component == null || component.getName() == null) return false;
+
+        String layer = component.getLayer();
+        String name = component.getName().toLowerCase();
+        String extendsClass = component.getExtendsClass();
+        String type = component.getType();
+
+        // Check by layer first
+        if ("UI".equals(layer)) {
+            return true;
+        }
+
+        // Check by type
+        if (type != null) {
+            String lowerType = type.toLowerCase();
+            if (lowerType.contains("activity") ||
+                    lowerType.contains("fragment") ||
+                    lowerType.contains("adapter") ||
+                    lowerType.contains("viewholder") ||
+                    lowerType.contains("view") ||
+                    lowerType.contains("layout") ||
+                    lowerType.contains("dialog") ||
+                    lowerType.contains("menu")) {
+                return true;
+            }
+        }
+
+        // Check by name patterns (works for both Java and Kotlin)
+        boolean isUIByName = name.endsWith("activity") ||
+                name.endsWith("fragment") ||
+                name.endsWith("adapter") ||
+                name.endsWith("viewholder") ||
+                name.contains("screen") ||
+                name.contains("page") ||
+                name.contains("dialog") ||
+                name.contains("view") ||
+                name.contains("layout") ||
+                name.contains("button") ||
+                name.contains("text") ||
+                name.contains("image") ||
+                name.contains("list") ||
+                name.contains("recycler") ||
+                name.contains("card");
+
+        // Check extends class (works for both Java and Kotlin)
+        boolean isUIByExtends = extendsClass != null &&
+                (extendsClass.endsWith("Activity") ||
+                        extendsClass.endsWith("Fragment") ||
+                        extendsClass.contains("android.app.Activity") ||
+                        extendsClass.contains("androidx.fragment.app.Fragment") ||
+                        extendsClass.contains("android.view.View") ||
+                        extendsClass.contains("android.widget.") ||
+                        extendsClass.contains("androidx.recyclerview.widget."));
+
+        return isUIByName || isUIByExtends;
+    }
     private void removeChildNodes() {
         // Remove connection lines
         for (Line line : connectionLines) {
@@ -523,25 +713,4 @@ public class GraphNode {
         return false;
     }
 
-    private boolean isUIComponent(CodeComponent component) {
-        if (component == null || component.getName() == null) return false;
-
-        String layer = component.getLayer();
-        String name = component.getName().toLowerCase();
-        String extendsClass = component.getExtendsClass();
-
-        return "UI".equals(layer) ||
-                name.endsWith("activity") ||
-                name.endsWith("fragment") ||
-                name.endsWith("adapter") ||
-                name.endsWith("viewholder") ||
-                name.contains("screen") ||
-                name.contains("page") ||
-                name.contains("dialog") ||
-                (extendsClass != null &&
-                        (extendsClass.endsWith("Activity") ||
-                                extendsClass.endsWith("Fragment") ||
-                                extendsClass.contains("android.app.Activity") ||
-                                extendsClass.contains("androidx.fragment.app.Fragment")));
-    }
 }

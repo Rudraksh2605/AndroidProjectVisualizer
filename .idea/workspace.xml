@@ -5,61 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="96e75262-d0be-4199-aeba-7ace1778131c" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/ComponentRelationship.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/ExternalIntegration.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/ProcessStep.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/ProjectAnalysisResult.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/build.gradle.kts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/controllers/MainController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/BusinessContext.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/BusinessProcessComponent.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/BusinessProcessComponent.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/CodeComponent.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/CodeField.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/CodeMethod.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/ComponentRelationship.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/DecisionPoint.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/Dependency.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/ExternalIntegration.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/FeatureGroup.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/NavigationDestination.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/NavigationDestination.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/NavigationFlow.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/NavigationPath.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/PerformanceMetrics.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/ProcessStep.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/ProjectAnalysisResult.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/UserAction.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/models/UserFlowComponent.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/AndroidManifestParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/AndroidManifestParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/BusinessProcessExtractor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/BusinessProcessExtractor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/DaggerHiltAnalyzer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/DaggerHiltAnalyzer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/DartParser.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/IntentAnalyzer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/IntentAnalyzer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaScriptParser.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/NavigationGraphParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/NavigationGraphParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/ScreenFlowDetector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/ScreenFlowDetector.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/XmlParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/XmlParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/ProjectAnalyzer.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/RelationshipBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/AbstractionLevel.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/EnhancedGraphExporter.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphExporter.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphVisualizer.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/VisualizationConfig.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/VisualizationEdge.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/VisualizationGraph.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/VisualizationNode.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/builders/AbstractVisualizationBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/builders/ComponentFlowBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/builders/DetailedBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/builders/FeatureBasedBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/builders/HighLevelModuleBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/builders/LayeredArchitectureBuilder.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/render/EdgeRenderer.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/ui/LegendFactory.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/resources/fxml/main.fxml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/fxml/main.fxml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphNode.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphNode.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -269,7 +217,7 @@
       <workItem from="1761242424903" duration="942000" />
       <workItem from="1761284325718" duration="5112000" />
       <workItem from="1761309038168" duration="12474000" />
-      <workItem from="1761539222863" duration="4885000" />
+      <workItem from="1761539222863" duration="7304000" />
     </task>
     <servers />
   </component>

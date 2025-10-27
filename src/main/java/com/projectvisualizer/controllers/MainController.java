@@ -795,31 +795,89 @@ public class MainController implements Initializable {
         return filteredComponents;
     }
 
+    // Enhanced UI component detection for both Java and Kotlin
     private boolean isUIComponent(CodeComponent component) {
         if (component == null || component.getName() == null) return false;
 
         String layer = component.getLayer();
         String name = component.getName().toLowerCase();
         String extendsClass = component.getExtendsClass();
+        String type = component.getType();
+        String packageName = component.getPackageName();
+        String filePath = component.getFilePath();
 
+        // Check by layer first
         if ("UI".equals(layer)) {
             return true;
         }
 
-        return name.endsWith("activity") ||
+        // Check by type (works for both Java and Kotlin)
+        if (type != null) {
+            String lowerType = type.toLowerCase();
+            if (lowerType.contains("activity") ||
+                    lowerType.contains("fragment") ||
+                    lowerType.contains("adapter") ||
+                    lowerType.contains("viewholder") ||
+                    lowerType.contains("view") ||
+                    lowerType.contains("layout") ||
+                    lowerType.contains("dialog") ||
+                    lowerType.contains("menu") ||
+                    lowerType.contains("button") ||
+                    lowerType.contains("text") ||
+                    lowerType.contains("image") ||
+                    lowerType.contains("list") ||
+                    lowerType.contains("recycler") ||
+                    lowerType.contains("card")) {
+                return true;
+            }
+        }
+
+        // Check by name patterns (works for both Java and Kotlin)
+        boolean isUIByName = name.endsWith("activity") ||
                 name.endsWith("fragment") ||
                 name.endsWith("adapter") ||
                 name.endsWith("viewholder") ||
+                name.endsWith("view") ||
+                name.endsWith("layout") ||
                 name.contains("screen") ||
                 name.contains("page") ||
                 name.contains("dialog") ||
-                (extendsClass != null &&
-                        (extendsClass.endsWith("Activity") ||
-                                extendsClass.endsWith("Fragment") ||
-                                extendsClass.contains("android.app.Activity") ||
-                                extendsClass.contains("androidx.fragment.app.Fragment")));
-    }
+                name.contains("button") ||
+                name.contains("text") ||
+                name.contains("image") ||
+                name.contains("list") ||
+                name.contains("recycler") ||
+                name.contains("card");
 
+        // Check extends class (works for both Java and Kotlin)
+        boolean isUIByExtends = extendsClass != null &&
+                (extendsClass.endsWith("Activity") ||
+                        extendsClass.endsWith("Fragment") ||
+                        extendsClass.endsWith("View") ||
+                        extendsClass.endsWith("Adapter") ||
+                        extendsClass.contains("android.app.Activity") ||
+                        extendsClass.contains("androidx.fragment.app.Fragment") ||
+                        extendsClass.contains("android.view.View") ||
+                        extendsClass.contains("android.widget.") ||
+                        extendsClass.contains("androidx.recyclerview.widget.") ||
+                        extendsClass.contains("androidx.appcompat.app.AppCompatActivity") ||
+                        extendsClass.contains("androidx.fragment.app.FragmentActivity"));
+
+        // Check package name for Android UI components
+        boolean isUIByPackage = packageName != null &&
+                (packageName.startsWith("android.") ||
+                        packageName.startsWith("androidx.") ||
+                        packageName.contains(".widget.") ||
+                        packageName.contains(".view.") ||
+                        packageName.contains(".custom."));
+
+        // Check file path for layout files
+        boolean isUIByFile = filePath != null &&
+                (filePath.contains("/layout/") ||
+                        filePath.endsWith(".xml") && filePath.contains("res"));
+
+        return isUIByName || isUIByExtends || isUIByPackage || isUIByFile;
+    }
     private void resolveDependencies(List<CodeComponent> allComponents) {
         if (allComponents == null || allComponents.isEmpty()) return;
 
