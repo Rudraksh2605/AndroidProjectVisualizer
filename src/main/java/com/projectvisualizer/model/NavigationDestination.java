@@ -1,10 +1,13 @@
-package com.projectvisualizer.models;
+// NavigationDestination.java
+package com.projectvisualizer.model;
 
 public class NavigationDestination {
     private String destinationId;
     private String destinationName;
-    private String destinationType; // fragment, activity, etc.
+    private String destinationType;
     private String actionId;
+
+    public NavigationDestination() {}
 
     public NavigationDestination(String destinationId, String destinationName, String destinationType, String actionId) {
         this.destinationId = destinationId;
@@ -13,7 +16,7 @@ public class NavigationDestination {
         this.actionId = actionId;
     }
 
-    // Getters and setters
+    // Getters and Setters
     public String getDestinationId() { return destinationId; }
     public void setDestinationId(String destinationId) { this.destinationId = destinationId; }
 

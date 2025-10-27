@@ -8,10 +8,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
-import com.projectvisualizer.models.CodeComponent;
-import com.projectvisualizer.models.CodeField;
-import com.projectvisualizer.models.CodeMethod;
-import com.projectvisualizer.models.NavigationFlow;
+import com.projectvisualizer.model.*;
 import com.projectvisualizer.parsers.DaggerHiltAnalyzer;
 
 import java.io.File;
@@ -49,25 +46,36 @@ public class JavaFileParser {
                     .map(pd -> pd.getNameAsString())
                     .orElse("");
 
-            cu.accept(new ClassVisitor(javaFile, packageName), components);
+            // Collect imports
+            List<String> imports = new ArrayList<>();
+            cu.getImports().forEach(imp -> imports.add(imp.getNameAsString()));
 
-            // Process all components in parallel for better performance
+            String moduleName = deriveModuleName(javaFile);
+
+            cu.accept(new ClassVisitor(javaFile, packageName, imports, moduleName), components);
+
             components.parallelStream().forEach(component -> {
                 cu.accept(new FieldVisitor(), component);
                 cu.accept(new MethodVisitor(), component);
+                cu.accept(new EnhancedMethodVisitor(), component);
                 cu.accept(new ConstructorVisitor(), component);
                 cu.accept(new AnnotationVisitor(), component);
+                cu.accept(new InheritanceVisitor(), component);
 
-                // Use static analyzer instance
+                // Dagger/Hilt analysis
                 DAGGER_HILT_ANALYZER.analyzeDaggerComponents(cu, component);
                 DAGGER_HILT_ANALYZER.analyzeHiltComponents(cu, component);
 
+                // Android Layer detector
                 detectAndroidLayer(component);
 
+                // Associate UI components via Activity layout mapping
                 if (activityLayoutMap != null && component.getType().equals("class")) {
-                    String fullClassName = packageName + "." + component.getName();
+                    String fullClassName = component.getId();
                     if (activityLayoutMap.containsKey(fullClassName)) {
                         component.setLayer("UI");
+                        component.setManifestRegistered(true);
+                        component.setComponentType("Activity");
                         String layoutFile = findLayoutFileForActivity(javaFile, component.getName());
                         if (layoutFile != null) {
                             component.addLayoutFile(layoutFile);
@@ -75,43 +83,92 @@ public class JavaFileParser {
                     }
                 }
             });
+
         }
 
         return components;
     }
 
+    private String deriveModuleName(File file) {
+        try {
+            String path = file.getAbsolutePath().replace('\\', '/');
+            if (path.contains("/app/")) return "app";
+            int idx = path.indexOf("/src/");
+            if (idx > 0) {
+                String base = path.substring(0, idx);
+                int lastSlash = base.lastIndexOf('/');
+                if (lastSlash >= 0 && lastSlash < base.length() - 1) {
+                    return base.substring(lastSlash + 1);
+                }
+            }
+            // Fallback to parent directory name
+            File parent = file.getParentFile();
+            while (parent != null) {
+                if (parent.getName().equals("src")) {
+                    File moduleDir = parent.getParentFile();
+                    return moduleDir != null ? moduleDir.getName() : "root";
+                }
+                parent = parent.getParentFile();
+            }
+        } catch (Exception ignored) { }
+        return "root";
+    }
+
     private void detectAndroidLayer(CodeComponent component) {
+        if (component.getName() == null) {
+            component.setLayer("Unknown");
+            return;
+        }
+
         if (component.getExtendsClass() != null) {
             String extendsClass = component.getExtendsClass();
 
-            // UI Layer detection
-            if (extendsClass.contains("Activity") || extendsClass.contains("Fragment") ||
-                    extendsClass.contains("AppCompatActivity") || extendsClass.contains("DialogFragment")) {
+            // More specific UI Layer detection
+            if (extendsClass.endsWith("Activity") ||
+                    extendsClass.endsWith("Fragment") ||
+                    extendsClass.endsWith("AppCompatActivity") ||
+                    extendsClass.endsWith("DialogFragment") ||
+                    extendsClass.contains("android.app.Activity") ||
+                    extendsClass.contains("androidx.fragment.app.Fragment")) {
                 component.setLayer("UI");
+                return;
             }
             // Business Logic Layer detection
-            else if (extendsClass.contains("ViewModel") || extendsClass.contains("Presenter") ||
-                    extendsClass.contains("Controller")) {
+            else if (extendsClass.endsWith("ViewModel") ||
+                    extendsClass.endsWith("Presenter") ||
+                    extendsClass.endsWith("Controller")) {
                 component.setLayer("Business Logic");
+                return;
             }
             // Data Layer detection
-            else if (extendsClass.contains("Repository") || extendsClass.contains("DataSource") ||
-                    extendsClass.contains("Dao")) {
+            else if (extendsClass.endsWith("Repository") ||
+                    extendsClass.endsWith("DataSource") ||
+                    extendsClass.endsWith("Dao")) {
                 component.setLayer("Data");
+                return;
             }
         }
 
-        // Additional detection based on class name patterns
+        // More specific detection based on class name patterns
         String className = component.getName().toLowerCase();
-        if (className.endsWith("activity") || className.endsWith("fragment") ||
-                className.endsWith("adapter") || className.endsWith("viewholder")) {
+        if (className.endsWith("activity") ||
+                className.endsWith("fragment") ||
+                className.endsWith("adapter") ||
+                className.endsWith("viewholder") ||
+                className.contains("view") && !className.contains("modelview") && !className.contains("viewmodel")) {
             component.setLayer("UI");
-        } else if (className.endsWith("viewmodel") || className.endsWith("presenter") ||
-                className.endsWith("controller")) {
+        } else if (className.endsWith("viewmodel") ||
+                className.endsWith("presenter") ||
+                className.endsWith("controller") ||
+                className.endsWith("usecase")) {
             component.setLayer("Business Logic");
-        } else if (className.endsWith("repository") || className.endsWith("datasource") ||
-                className.endsWith("dao") || className.endsWith("service")) {
+        } else if (className.endsWith("repository") ||
+                className.endsWith("datasource") ||
+                className.endsWith("dao") ||
+                className.endsWith("service")) {
             component.setLayer("Data");
+        } else {
+            component.setLayer("Unknown");
         }
     }
 
@@ -144,10 +201,14 @@ public class JavaFileParser {
     private static class ClassVisitor extends VoidVisitorAdapter<List<CodeComponent>> {
         private final File javaFile;
         private final String packageName;
+        private final List<String> imports;
+        private final String moduleName;
 
-        public ClassVisitor(File javaFile, String packageName) {
+        public ClassVisitor(File javaFile, String packageName, List<String> imports, String moduleName) {
             this.javaFile = javaFile;
             this.packageName = packageName;
+            this.imports = imports;
+            this.moduleName = moduleName;
         }
 
         @Override
@@ -161,6 +222,15 @@ public class JavaFileParser {
             component.setType(n.isInterface() ? "interface" : "class");
             component.setFilePath(javaFile.getAbsolutePath());
             component.setLanguage("java");
+            component.setPackageName(packageName);
+            component.setModuleName(moduleName);
+            component.setImports(new ArrayList<>(imports));
+            component.setFileExtension("java");
+
+            // Modifiers
+            List<String> modifiers = new ArrayList<>();
+            n.getModifiers().forEach(m -> modifiers.add(m.getKeyword().asString()));
+            component.setModifiers(modifiers);
 
             if (!n.getExtendedTypes().isEmpty()) {
                 component.setExtendsClass(n.getExtendedTypes().get(0).getNameAsString());
@@ -285,6 +355,75 @@ public class JavaFileParser {
                 return true;
             default:
                 return false;
+        }
+    }
+
+    private static class EnhancedMethodVisitor extends VoidVisitorAdapter<CodeComponent> {
+        @Override
+        public void visit(MethodDeclaration n, CodeComponent component) {
+            // Check return type
+            String returnType = n.getType().asString();
+            if (!isPrimitiveType(returnType) && !returnType.startsWith("java.")) {
+                addDependency(component, returnType);
+            }
+
+            // Check parameter types
+            for (var parameter : n.getParameters()) {
+                String paramType = parameter.getType().asString();
+                if (!isPrimitiveType(paramType) && !paramType.startsWith("java.")) {
+                    addDependency(component, paramType);
+                }
+            }
+            super.visit(n, component);
+        }
+
+        private void addDependency(CodeComponent component, String typeName) {
+            // Avoid duplicates
+            boolean exists = component.getDependencies().stream()
+                    .anyMatch(dep -> dep.getId().equals(typeName));
+
+            if (!exists) {
+                CodeComponent dependency = new CodeComponent();
+                dependency.setId(typeName);
+                dependency.setName(typeName);
+                dependency.setType("class");
+                component.getDependencies().add(dependency);
+            }
+        }
+    }
+
+    private static class InheritanceVisitor extends VoidVisitorAdapter<CodeComponent> {
+        @Override
+        public void visit(ClassOrInterfaceDeclaration n, CodeComponent component) {
+            // Handle extends
+            if (!n.getExtendedTypes().isEmpty()) {
+                String extendsType = n.getExtendedTypes().get(0).getNameAsString();
+                if (!isPrimitiveType(extendsType) && !extendsType.startsWith("java.")) {
+                    addDependency(component, extendsType);
+                }
+            }
+
+            // Handle implements
+            for (var implementedType : n.getImplementedTypes()) {
+                String implType = implementedType.getNameAsString();
+                if (!isPrimitiveType(implType) && !implType.startsWith("java.")) {
+                    addDependency(component, implType);
+                }
+            }
+            super.visit(n, component);
+        }
+
+        private void addDependency(CodeComponent component, String typeName) {
+            boolean exists = component.getDependencies().stream()
+                    .anyMatch(dep -> dep.getId().equals(typeName));
+
+            if (!exists) {
+                CodeComponent dependency = new CodeComponent();
+                dependency.setId(typeName);
+                dependency.setName(typeName);
+                dependency.setType("class");
+                component.getDependencies().add(dependency);
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.projectvisualizer.parsers;
 
-import com.projectvisualizer.models.*;
+import com.projectvisualizer.model.*;
 import java.util.*;
 
 public class ScreenFlowDetector {
@@ -24,27 +24,39 @@ public class ScreenFlowDetector {
     }
 
     private boolean isUserInterfaceComponent(CodeComponent component) {
+        if (component == null || component.getName() == null) return false;
+
         String name = component.getName().toLowerCase();
         String type = component.getType() != null ? component.getType().toLowerCase() : "";
         String extendsClass = component.getExtendsClass();
+        String layer = component.getLayer();
 
-        return name.contains("activity") ||
-                name.contains("fragment") ||
-                name.contains("dialog") ||
+        if ("UI".equals(layer)) {
+            return true;
+        }
+
+        return name.endsWith("activity") ||
+                name.endsWith("fragment") ||
+                name.endsWith("dialog") ||
+                name.contains("screen") ||
+                name.contains("page") ||
                 type.contains("activity") ||
                 type.contains("fragment") ||
                 (extendsClass != null && (
-                        extendsClass.contains("Activity") ||
-                                extendsClass.contains("Fragment") ||
-                                extendsClass.contains("Dialog")
+                        extendsClass.endsWith("Activity") ||
+                                extendsClass.endsWith("Fragment") ||
+                                extendsClass.endsWith("Dialog") ||
+                                extendsClass.contains("android.app.Activity") ||
+                                extendsClass.contains("androidx.fragment.app.Fragment")
                 ));
     }
 
     private UserFlowComponent convertToUserFlow(CodeComponent component, List<NavigationFlow> flows) {
         UserFlowComponent userFlow = new UserFlowComponent();
         userFlow.setId(component.getId());
-        userFlow.setScreenName(component.getName());
-        userFlow.setActivityName(component.getName());
+        String componentName = component.getName() != null ? component.getName() : "Unknown";
+        userFlow.setScreenName(componentName);
+        userFlow.setActivityName(componentName);
 
         // Find outgoing navigation flows
         for (NavigationFlow flow : flows) {
@@ -264,5 +276,40 @@ public class ScreenFlowDetector {
                 context.setSuccessMetric("User engagement time");
                 break;
         }
+    }
+
+    public List<CodeComponent> filterUIComponents(List<CodeComponent> allComponents) {
+        List<CodeComponent> uiComponents = new ArrayList<>();
+
+        for (CodeComponent component : allComponents) {
+            if (isUIComponent(component)) {
+                uiComponents.add(component);
+            }
+        }
+
+        return uiComponents;
+    }
+
+    private boolean isUIComponent(CodeComponent component) {
+        if (component == null || component.getName() == null) return false;
+
+        String layer = component.getLayer();
+        String name = component.getName().toLowerCase();
+
+        // Explicit UI layer
+        if ("UI".equals(layer)) {
+            return true;
+        }
+
+        // Check for UI patterns in name and type
+        return name.endsWith("activity") ||
+                name.endsWith("fragment") ||
+                name.contains("adapter") ||
+                name.contains("viewholder") ||
+                name.contains("screen") ||
+                name.contains("page") ||
+                (component.getExtendsClass() != null &&
+                        (component.getExtendsClass().contains("Activity") ||
+                                component.getExtendsClass().contains("Fragment")));
     }
 }

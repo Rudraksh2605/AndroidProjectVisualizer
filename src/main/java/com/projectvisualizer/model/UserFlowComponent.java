@@ -1,4 +1,5 @@
-package com.projectvisualizer.models;
+
+package com.projectvisualizer.model;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,22 +9,29 @@ public class UserFlowComponent {
     private String screenName;
     private String activityName;
     private FlowType flowType;
-    private List<UserAction> userActions = new ArrayList<>();
-    private List<NavigationPath> outgoingPaths = new ArrayList<>();
-    private List<NavigationPath> incomingPaths = new ArrayList<>();
+    private List<UserAction> userActions;
+    private List<NavigationPath> outgoingPaths;
     private BusinessContext businessContext;
     private PerformanceMetrics performanceMetrics;
 
     public enum FlowType {
-        ENTRY_POINT, MAIN_FLOW, DECISION_POINT, EXIT_POINT, ERROR_HANDLING
+        ENTRY_POINT, EXIT_POINT, DECISION_POINT, ERROR_HANDLING, MAIN_FLOW
     }
 
-    // Getters and setters
+    public UserFlowComponent() {
+        this.userActions = new ArrayList<>();
+        this.outgoingPaths = new ArrayList<>();
+    }
+
+    // Getters and Setters
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
     public String getScreenName() { return screenName; }
     public void setScreenName(String screenName) { this.screenName = screenName; }
+
+    public String getActivityName() { return activityName; }
+    public void setActivityName(String activityName) { this.activityName = activityName; }
 
     public FlowType getFlowType() { return flowType; }
     public void setFlowType(FlowType flowType) { this.flowType = flowType; }
@@ -31,41 +39,21 @@ public class UserFlowComponent {
     public List<UserAction> getUserActions() { return userActions; }
     public void setUserActions(List<UserAction> userActions) { this.userActions = userActions; }
 
+    public List<NavigationPath> getOutgoingPaths() { return outgoingPaths; }
+    public void setOutgoingPaths(List<NavigationPath> outgoingPaths) { this.outgoingPaths = outgoingPaths; }
 
     public BusinessContext getBusinessContext() { return businessContext; }
     public void setBusinessContext(BusinessContext businessContext) { this.businessContext = businessContext; }
-    public void setActivityName(String activityName) {
-        this.activityName = activityName;
-    }
 
-    public List<NavigationPath> getIncomingPaths() {
-        return incomingPaths;
-    }
+    public PerformanceMetrics getPerformanceMetrics() { return performanceMetrics; }
+    public void setPerformanceMetrics(PerformanceMetrics performanceMetrics) { this.performanceMetrics = performanceMetrics; }
 
-
-    public PerformanceMetrics getPerformanceMetrics() {
-        return performanceMetrics;
-    }
-
-    public void setPerformanceMetrics(PerformanceMetrics performanceMetrics) {
-        this.performanceMetrics = performanceMetrics;
-    }
-
-    // Add these getters/setters if missing
-    public List<NavigationPath> getOutgoingPaths() {
-        return outgoingPaths;
-    }
-
-    public void setOutgoingPaths(List<NavigationPath> outgoingPaths) {
-        this.outgoingPaths = outgoingPaths;
+    // Helper methods
+    public void addUserAction(UserAction action) {
+        this.userActions.add(action);
     }
 
     public void addOutgoingPath(NavigationPath path) {
-        if (this.outgoingPaths == null) {
-            this.outgoingPaths = new ArrayList<>();
-        }
         this.outgoingPaths.add(path);
     }
-
-
 }

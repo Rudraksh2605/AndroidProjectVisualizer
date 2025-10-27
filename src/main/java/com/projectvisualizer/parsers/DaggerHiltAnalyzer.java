@@ -6,7 +6,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
-import com.projectvisualizer.models.CodeComponent;
+import com.projectvisualizer.model.CodeComponent;
 
 import java.util.ArrayList;
 import java.util.List;

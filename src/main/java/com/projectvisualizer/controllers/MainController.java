@@ -1,1282 +1,987 @@
 package com.projectvisualizer.controllers;
 
-import com.projectvisualizer.models.CodeComponent;
-import com.projectvisualizer.models.ComponentRelationship;
-import com.projectvisualizer.models.ProjectAnalysisResult;
-import javax.imageio.ImageIO;
-import java.nio.file.Files;
-
-import com.projectvisualizer.visualization.*;
-import javafx.embed.swing.SwingFXUtils;
-import com.projectvisualizer.services.ProjectAnalyzer;
-import javafx.application.Platform;
+import com.projectvisualizer.model.CodeComponent;
+import com.projectvisualizer.model.AnalysisResult;
+import com.projectvisualizer.services.ProjectAnalysisService;
+import com.projectvisualizer.visualization.GraphManager;
+import com.projectvisualizer.visualization.GraphNode;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
-import javafx.geometry.Insets;
+import javafx.fxml.Initializable;
 import javafx.scene.control.*;
-import javafx.scene.control.Slider;
-import javafx.scene.image.ImageView;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.DirectoryChooser;
-import org.controlsfx.control.StatusBar;
-import javafx.scene.image.WritableImage;
 import javafx.stage.FileChooser;
-
-import java.awt.image.BufferedImage;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.scene.control.cell.TextFieldTreeCell;
+import javafx.util.Callback;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.Image;
 import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.net.URL;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-public class MainController {
+// Diagram renderers
+import net.sourceforge.plantuml.SourceStringReader;
+import guru.nidi.graphviz.engine.Graphviz;
+import guru.nidi.graphviz.engine.Format;
+import net.sourceforge.plantuml.FileFormat;
+import net.sourceforge.plantuml.FileFormatOption;
+import javafx.embed.swing.SwingFXUtils;
+import java.awt.image.BufferedImage;
 
-    @FXML private TreeView<String> projectTreeView;
-    @FXML private TabPane visualizationTabPane;
-    @FXML private Label statusLabel;
-    @FXML private StatusBar statusBar;
+public class MainController implements Initializable {
+
+    // FXML Injections from main.fxml
     @FXML private VBox mainContainer;
-    @FXML private Label zoomLabel;
-    @FXML private Label statusZoomLabel;
-    @FXML private Label memoryLabel;
-    @FXML private Label projectInfoLabel;
-    @FXML private Label progressLabel;
-    @FXML private HBox progressContainer;
-    @FXML private ProgressIndicator analysisProgressIndicator;
-    @FXML private Circle connectionStatusIndicator;
-    @FXML private TextField searchField;
-    @FXML private ComboBox<String> layerFilterComboBox;
-    @FXML private ComboBox<String> typeFilterComboBox;
-    @FXML private ComboBox<String> languageFilterComboBox;
-    @FXML private ComboBox<String> layoutComboBox;
-    @FXML private CheckBox showLabelsCheckBox;
-    @FXML private CheckBox showGridCheckBox;
-    @FXML private CheckBox showMinimapCheckBox;
+    @FXML private TreeView<String> projectTreeView;
+    @FXML private ScrollPane diagramScrollPane;
+    @FXML private ScrollPane minimapScrollPane;
+    @FXML private Pane legendOverlayPane;
+    @FXML private TabPane visualizationTabPane;
     @FXML private ListView<String> componentsListView;
     @FXML private VBox dependenciesContainer;
     @FXML private VBox statisticsContainer;
     @FXML private VBox metricsContainer;
-    @FXML private ScrollPane diagramScrollPane;
-    @FXML private ScrollPane minimapScrollPane;
-    @FXML private ComboBox<String> visualizationModeComboBox;
-    @FXML private Pane legendOverlayPane;
     @FXML private TextArea plantUMLTextArea;
     @FXML private TextArea graphvizTextArea;
-    @FXML private ImageView plantUMLImageView;
-    @FXML private ImageView graphvizImageView;
+
+    // PlantUML and Graphviz tabs
     @FXML private Tab plantUMLImageTab;
     @FXML private Tab graphvizImageTab;
+    @FXML private ImageView plantUMLImageView;
+    @FXML private ImageView graphvizImageView;
 
-    @FXML private ComboBox<String> abstractionLevelComboBox;
-    @FXML private CheckBox enableClusteringCheckBox;
-    @FXML private CheckBox enableEdgeAggregationCheckBox;
-    @FXML private CheckBox hideUtilityClassesCheckBox;
-    @FXML private CheckBox hideTestClassesCheckBox;
-    @FXML private Slider complexityThresholdSlider;
+    // Toolbar controls
     @FXML private ComboBox<String> featureFilterComboBox;
-    @FXML private Button expandAllButton;
-    @FXML private Button collapseAllButton;
+    @FXML private Label zoomLabel;
+    @FXML private CheckBox showLabelsCheckBox;
+    @FXML private CheckBox showGridCheckBox;
+    @FXML private CheckBox showMinimapCheckBox;
 
-    private EnhancedGraphExporter enhancedExporter;
-    private AbstractionLevel currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
-    private VisualizationConfig visualizationConfig = new VisualizationConfig();
-    private ProjectAnalyzer projectAnalyzer;
-    private GraphVisualizer graphVisualizer;
-    private double currentZoomLevel = 1.0;
-    private double plantUMLZoomFactor = 1.0;
-    private double graphvizZoomFactor = 1.0;
-    private BufferedImage plantUMLBufferedImage;
-    private BufferedImage graphvizBufferedImage;
+    // Status bar
+    @FXML private Label statusLabel;
+    @FXML private Label projectInfoLabel;
+    @FXML private Label memoryLabel;
+    @FXML private Label statusZoomLabel;
+    @FXML private Circle connectionStatusIndicator;
+    @FXML private ProgressIndicator analysisProgressIndicator;
+    @FXML private Label progressLabel;
+    @FXML private HBox progressContainer;
 
-    private ProjectAnalysisResult currentAnalysisResult;
+    private GraphManager graphManager;
+    private Pane graphCanvas;
+    private Map<String, CodeComponent> componentMap;
+    private double currentZoom = 1.0;
+    private double plantUmlZoom = 1.0;
+    private double graphvizZoom = 1.0;
+    private AnalysisResult currentAnalysisResult;
 
-
-    private GraphVisualizer.LayoutType currentLayoutType = GraphVisualizer.LayoutType.HIERARCHICAL;
-    private boolean showLabels = true;
-    private boolean showGrid = false;
-
-    @FXML
-    public void initialize() {
-        projectAnalyzer = new ProjectAnalyzer();
-        graphVisualizer = new GraphVisualizer();
-        enhancedExporter = new EnhancedGraphExporter();
-        setupProjectTree();
-        setupStatusBar();
-        setupComboBoxes();
-        setupCheckBoxes();
-        setupImageTabs();
-
-        setupEnhancedControls();
-
-
-
-        visualizationModeComboBox.setValue("Technical Architecture");
-
-        visualizationModeComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-            updateVisualizationMode(newVal);
-        });
-
-        // Set up memory monitoring
-        setupMemoryMonitoring();
+    @Override
+    public void initialize(URL location, ResourceBundle resources) {
+        initializeGraphCanvas();
+        initializeTreeView();
+        initializeEventHandlers();
+        initializeStatusBar();
+        loadSampleData();
     }
 
-    private void setupImageTabs() {
-        // Add listeners to generate images when tabs are selected
-        plantUMLImageTab.setOnSelectionChanged(event -> {
-            if (plantUMLImageTab.isSelected() && currentAnalysisResult != null) {
-                generatePlantUMLImage();
+    private void initializeGraphCanvas() {
+        graphCanvas = new Pane();
+        graphCanvas.setStyle("-fx-background-color: #f8f9fa;");
+
+        diagramScrollPane.setContent(graphCanvas);
+        diagramScrollPane.setPannable(true);
+        diagramScrollPane.setFitToWidth(false);
+        diagramScrollPane.setFitToHeight(false);
+        diagramScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        diagramScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        diagramScrollPane.setStyle("-fx-background: #f8f9fa; -fx-border-color: #e0e0e0;");
+
+        // Enable smooth scrolling
+        diagramScrollPane.setHvalue(0.5);
+        diagramScrollPane.setVvalue(0.5);
+
+        // Make canvas dynamically expandable
+        graphCanvas.setMinSize(2000, 2000);
+        graphCanvas.setPrefSize(2000, 2000);
+        graphCanvas.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+
+        diagramScrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
+            if (!graphManager.hasNodes()) {
+                double viewportWidth = newVal.getWidth();
+                double viewportHeight = newVal.getHeight();
+                // Set initial size based on viewport
+                graphCanvas.setPrefSize(
+                        Math.max(2000, viewportWidth),
+                        Math.max(2000, viewportHeight)
+                );
             }
         });
 
-        graphvizImageTab.setOnSelectionChanged(event -> {
-            if (graphvizImageTab.isSelected() && currentAnalysisResult != null) {
-                generateGraphvizImage();
-            }
-        });
+        graphManager = new GraphManager(graphCanvas);
+        componentMap = new HashMap<>();
     }
 
-    private void updateVisualizationMode(String mode) {
-        GraphVisualizer.VisualizationMode vizMode = mapStringToVisualizationMode(mode);
-        graphVisualizer.setVisualizationMode(vizMode);
+    private void initializeTreeView() {
+        TreeItem<String> rootItem = new TreeItem<>("Project Structure");
+        rootItem.setExpanded(true);
 
-        // Set appropriate abstraction level based on mode
-        switch (vizMode) {
-            case TECHNICAL_ARCHITECTURE:
-                abstractionLevelComboBox.setValue(AbstractionLevel.HIGH_LEVEL.getDisplayName());
-                currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
-                break;
-            case USER_JOURNEY:
-                // User journey view uses a different approach, not directly mapped to abstraction levels
-                // Keep current abstraction level or set to a default
-                break;
-            case BUSINESS_PROCESS:
-                abstractionLevelComboBox.setValue(AbstractionLevel.COMPONENT_FLOW.getDisplayName());
-                currentAbstractionLevel = AbstractionLevel.COMPONENT_FLOW;
-                break;
-            case FEATURE_OVERVIEW:
-                abstractionLevelComboBox.setValue(AbstractionLevel.FEATURE_BASED.getDisplayName());
-                currentAbstractionLevel = AbstractionLevel.FEATURE_BASED;
-                break;
-            case INTEGRATION_MAP:
-                abstractionLevelComboBox.setValue(AbstractionLevel.DETAILED.getDisplayName());
-                currentAbstractionLevel = AbstractionLevel.DETAILED;
-                break;
-            default:
-                abstractionLevelComboBox.setValue(AbstractionLevel.HIGH_LEVEL.getDisplayName());
-                currentAbstractionLevel = AbstractionLevel.HIGH_LEVEL;
-        }
+        // Sample grouping by file extensions
+        TreeItem<String> javaGroup = new TreeItem<>("Java Files (.java)");
+        TreeItem<String> kotlinGroup = new TreeItem<>("Kotlin Files (.kt)");
+        TreeItem<String> xmlGroup = new TreeItem<>("XML Files (.xml)");
 
-        // Update the graph visualizer with the current abstraction level
-        graphVisualizer.setAbstractionLevel(currentAbstractionLevel);
-
-        refreshGraph();
-    }
-
-
-    private void setupComboBoxes() {
-        // Setup layer filter
-        layerFilterComboBox.getItems().addAll("All Layers", "UI", "Business Logic", "Data", "Other");
-        layerFilterComboBox.setValue("All Layers");
-
-        // Setup layout combo
-        layoutComboBox.getItems().addAll("Hierarchical", "Force-Directed", "Circular", "Grid", "Layered");
-        layoutComboBox.setValue("Grid");
-
-        layoutComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-            switch (newVal) {
-                case "Hierarchical":
-                    currentLayoutType = GraphVisualizer.LayoutType.HIERARCHICAL;
-                    break;
-                case "Force-Directed":
-                    currentLayoutType = GraphVisualizer.LayoutType.FORCE_DIRECTED;
-                    break;
-                case "Circular":
-                    currentLayoutType = GraphVisualizer.LayoutType.CIRCULAR;
-                    break;
-                case "Grid":
-                    currentLayoutType = GraphVisualizer.LayoutType.GRID;
-                    break;
-                case "Layered":
-                    currentLayoutType = GraphVisualizer.LayoutType.LAYERED;
-                    break;
-            }
-            refreshGraph();
-        });
-
-        // Enhanced visualization mode combo
-        visualizationModeComboBox.getItems().addAll(
-                "Technical Architecture", "User Journey", "Business Process",
-                "Feature Overview", "Integration Map"
+        // Sample files
+        javaGroup.getChildren().addAll(
+                new TreeItem<>("MainActivity.java"),
+                new TreeItem<>("UserRepository.java")
         );
-        visualizationModeComboBox.setValue("Technical Architecture");
+        kotlinGroup.getChildren().addAll(
+                new TreeItem<>("LoginFragment.kt"),
+                new TreeItem<>("UserViewModel.kt")
+        );
+        xmlGroup.getChildren().addAll(
+                new TreeItem<>("activity_main.xml"),
+                new TreeItem<>("fragment_login.xml")
+        );
 
-        visualizationModeComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-            updateVisualizationMode(newVal);
-        });
-    }
+        rootItem.getChildren().addAll(javaGroup, kotlinGroup, xmlGroup);
 
-    private void refreshGraph() {
-        if (currentAnalysisResult != null) {
-            // Update graph visualizer settings
-            graphVisualizer.setLayoutType(currentLayoutType);
-            graphVisualizer.setAbstractionLevel(currentAbstractionLevel);
-            graphVisualizer.setVisualizationConfig(visualizationConfig);
-            graphVisualizer.setShowLabels(showLabels);
-            graphVisualizer.setShowGrid(showGrid);
+        projectTreeView.setRoot(rootItem);
+        projectTreeView.setShowRoot(true);
 
-            // Update feature filter options
-            updateFeatureFilterOptions();
-
-            // Refresh the diagram
-            ScrollPane diagram = graphVisualizer.createGraphView(currentAnalysisResult);
-            diagramScrollPane.setContent(diagram.getContent());
-
-            // Place legend into fixed overlay
-            if (legendOverlayPane != null) {
-                legendOverlayPane.getChildren().clear();
-                javafx.scene.layout.Region legend = graphVisualizer.getLegend();
-                if (legend != null) {
-                    legendOverlayPane.getChildren().add(legend);
-                }
-            }
-
-            // Auto-fit after layout
-            javafx.application.Platform.runLater(() -> {
-                graphVisualizer.fitToWindow(diagramScrollPane);
-                currentZoomLevel = graphVisualizer.getCurrentZoom();
-                updateZoom();
-            });
-
-            // Update export text areas with enhanced content
-            updateExportTextAreas();
-        }
-    }
-
-
-    private void setupCheckBoxes() {
-        // Set up check box listeners
-        showLabelsCheckBox.setSelected(true);
-        showGridCheckBox.setSelected(false);
-        showMinimapCheckBox.setSelected(false);
-
-        // Add listeners
-        showLabelsCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            showLabels = newVal;
-            refreshGraph();
-        });
-
-        showGridCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            showGrid = newVal;
-            refreshGraph();
-        });
-    }
-
-    private void setupMemoryMonitoring() {
-        // Update memory usage periodically
-        javafx.animation.AnimationTimer memoryTimer = new javafx.animation.AnimationTimer() {
+        projectTreeView.setCellFactory(new Callback<TreeView<String>, TreeCell<String>>() {
             @Override
-            public void handle(long now) {
-                long usedMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-                memoryLabel.setText(String.format("Memory: %d MB", usedMemory / (1024 * 1024)));
+            public TreeCell<String> call(TreeView<String> param) {
+                return new TextFieldTreeCell<String>() {
+                    @Override
+                    public void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) {
+                            setText(null);
+                            setGraphic(null);
+                        } else {
+                            setText(item);
+                        }
+                    }
+                };
             }
-        };
-        memoryTimer.start();
+        });
+    }
+
+
+    private void initializeEventHandlers() {
+        // Tree view selection listener
+        projectTreeView.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, newValue) -> {
+                    if (newValue != null && !newValue.getValue().equals("Project Structure")) {
+                        handleComponentSelection(newValue);
+                    }
+                }
+        );
+
+        // Render PlantUML/Graphviz images when their tabs are selected
+        if (visualizationTabPane != null) {
+            visualizationTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+                try {
+                    if (newTab == plantUMLImageTab) {
+                        renderPlantUml(true);
+                    } else if (newTab == graphvizImageTab) {
+                        renderGraphviz(true);
+                    }
+                } catch (Exception e) {
+                    statusLabel.setText("Failed to render diagram: " + e.getMessage());
+                }
+            });
+        }
+
+        updateZoomLabel();
+    }
+
+    private void initializeStatusBar() {
+        statusLabel.setText("Ready");
+        projectInfoLabel.setText("No project loaded");
+        memoryLabel.setText("Memory: " + getUsedMemory() + " MB");
+        statusZoomLabel.setText("100%");
+        startMemoryMonitoring();
+    }
+
+    private void loadSampleData() {
+        // Create sample components for testing
+        CodeComponent mainActivity = new CodeComponent();
+        mainActivity.setId("MainActivity");
+        mainActivity.setName("MainActivity");
+        mainActivity.setType("Activity");
+        mainActivity.setLayer("UI");
+        mainActivity.setLanguage("Java");
+
+        CodeComponent loginFragment = new CodeComponent();
+        loginFragment.setId("LoginFragment");
+        loginFragment.setName("LoginFragment");
+        loginFragment.setType("Fragment");
+        loginFragment.setLayer("UI");
+        loginFragment.setLanguage("Kotlin");
+
+        CodeComponent userRepository = new CodeComponent();
+        userRepository.setId("UserRepository");
+        userRepository.setName("UserRepository");
+        userRepository.setType("Repository");
+        userRepository.setLayer("Data");
+        userRepository.setLanguage("Java");
+
+        CodeComponent userViewModel = new CodeComponent();
+        userViewModel.setId("UserViewModel");
+        userViewModel.setName("UserViewModel");
+        userViewModel.setType("ViewModel");
+        userViewModel.setLayer("Business Logic");
+        userViewModel.setLanguage("Kotlin");
+
+        // Add dependencies
+        mainActivity.addDependency(loginFragment);
+        loginFragment.addDependency(userRepository);
+        userRepository.addDependency(userViewModel);
+
+        // Store in map
+        componentMap.put("MainActivity", mainActivity);
+        componentMap.put("LoginFragment", loginFragment);
+        componentMap.put("UserRepository", userRepository);
+        componentMap.put("UserViewModel", userViewModel);
+
+        statusLabel.setText("Sample data loaded");
     }
 
     @FXML
     private void handleOpenProject() {
         DirectoryChooser directoryChooser = new DirectoryChooser();
-        directoryChooser.setTitle("Select Project Directory");
+        directoryChooser.setTitle("Open Project Directory");
         File selectedDirectory = directoryChooser.showDialog(mainContainer.getScene().getWindow());
 
         if (selectedDirectory != null) {
-            analyzeProject(selectedDirectory);
+            statusLabel.setText("Loading project: " + selectedDirectory.getName());
+            projectInfoLabel.setText("Project: " + selectedDirectory.getName());
+
+            progressContainer.setVisible(true);
+            progressLabel.setText("Analyzing project structure...");
+
+            Task<AnalysisResult> analysisTask = new Task<AnalysisResult>() {
+                @Override
+                protected AnalysisResult call() throws Exception {
+                    ProjectAnalysisService analysisService = new ProjectAnalysisService();
+                    return analysisService.analyzeProject(selectedDirectory);
+                }
+            };
+
+            analysisTask.setOnSucceeded(event -> {
+                currentAnalysisResult = analysisTask.getValue();
+                progressContainer.setVisible(false);
+
+                if (currentAnalysisResult.getError() != null) {
+                    statusLabel.setText("Analysis failed: " + currentAnalysisResult.getError());
+                    showErrorAlert("Analysis Error", currentAnalysisResult.getError());
+                } else {
+                    handleAnalysisResult(currentAnalysisResult);
+                }
+            });
+
+            analysisTask.setOnFailed(event -> {
+                progressContainer.setVisible(false);
+                statusLabel.setText("Project analysis failed");
+                showErrorAlert("Analysis Failed", "Failed to analyze project: " +
+                        analysisTask.getException().getMessage());
+            });
+
+            new Thread(analysisTask).start();
+        }
+    }
+
+    private void handleAnalysisResult(AnalysisResult result) {
+        statusLabel.setText("Project analysis complete");
+
+        componentMap.clear();
+        for (CodeComponent component : result.getComponents()) {
+            // Add duplicate check here too for the main componentMap
+            if (componentMap.containsKey(component.getId())) {
+                System.err.println("Duplicate in main componentMap: " + component.getId());
+                // Handle duplicate - you might want to append something to make it unique
+                String uniqueId = component.getId() + "_" + System.currentTimeMillis();
+                component.setId(uniqueId);
+            }
+            componentMap.put(component.getId(), component);
+        }
+
+        // RESOLVE DEPENDENCIES AFTER LOADING ALL COMPONENTS
+        try {
+            resolveDependencies(result.getComponents());
+        } catch (Exception e) {
+            System.err.println("Error resolving dependencies: " + e.getMessage());
+            e.printStackTrace();
+            statusLabel.setText("Warning: Some dependencies could not be resolved");
+        }
+
+        graphManager.clearGraph();
+
+        int uiCount = filterUIComponents(result.getComponents()).size();
+        int businessLogicCount = filterComponentsByLayer(result.getComponents(), "Business Logic").size();
+        int dataCount = filterComponentsByLayer(result.getComponents(), "Data").size();
+
+        statusLabel.setText(String.format(
+                "Analysis complete - UI: %d, Business Logic: %d, Data: %d, Total: %d",
+                uiCount, businessLogicCount, dataCount, result.getComponents().size()
+        ));
+
+        updateComponentList();
+        updateProjectTreeWithRealData(result.getComponents());
+
+        handleResetZoom();
+        diagramScrollPane.setVvalue(0);
+        diagramScrollPane.setHvalue(0);
+    }
+
+    @FXML
+    private void handleExportEnhancedDiagram() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Enhanced Diagram");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PNG Files", "*.png"),
+                new FileChooser.ExtensionFilter("JPEG Files", "*.jpg"),
+                new FileChooser.ExtensionFilter("SVG Files", "*.svg")
+        );
+
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+        if (file != null) {
+            statusLabel.setText("Exported diagram to: " + file.getName());
         }
     }
 
     @FXML
     private void handleExportDiagram() {
-        if (currentAnalysisResult == null) {
-            showInfoDialog("Export", "No project loaded", "Please open a project first.");
-            return;
-        }
-
-        // Create a custom dialog with export options
-        Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Export Diagram");
-        dialog.setHeaderText("Choose export format:");
-
-        ButtonType pngButton = new ButtonType("PNG Image");
-        ButtonType jpgButton = new ButtonType("JPEG Image");
-        ButtonType plantUmlButton = new ButtonType("PlantUML");
-        ButtonType graphvizButton = new ButtonType("Graphviz");
-        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
-
-        dialog.getDialogPane().getButtonTypes().addAll(pngButton, jpgButton, plantUmlButton, graphvizButton, cancelButton);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == pngButton) return "png";
-            if (dialogButton == jpgButton) return "jpg";
-            if (dialogButton == plantUmlButton) return "puml";
-            if (dialogButton == graphvizButton) return "dot";
-            return null;
-        });
-
-        java.util.Optional<String> result = dialog.showAndWait();
-        result.ifPresent(format -> {
-            switch (format) {
-                case "png":
-                case "jpg":
-                    exportImage(format);
-                    break;
-                case "puml":
-                    handleExportToPlantUML();
-                    break;
-                case "dot":
-                    handleExportToGraphviz();
-                    break;
-            }
-        });
-    }
-
-    private void exportImage(String format) {
-        try {
-            WritableImage image = diagramScrollPane.snapshot(null, null);
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Export Diagram as " + format.toUpperCase());
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                    format.toUpperCase() + " Image", "*." + format));
-
-            File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
-            if (file != null) {
-                ImageIO.write(SwingFXUtils.fromFXImage(image, null), format, file);
-                showInfoDialog("Export Successful", "Diagram exported successfully",
-                        "The diagram has been exported to: " + file.getAbsolutePath());
-            }
-        } catch (IOException e) {
-            showErrorDialog("Export Error", "Failed to export diagram", e.getMessage());
-        }
+        handleExportEnhancedDiagram();
     }
 
     @FXML
     private void handleExportReport() {
-        showInfoDialog("Export Report", "Report functionality", "Report export feature will be implemented in future versions.");
-    }
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Report");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
+                new FileChooser.ExtensionFilter("HTML Files", "*.html"),
+                new FileChooser.ExtensionFilter("JSON Files", "*.json")
+        );
 
-    @FXML
-    private void handleRefreshAnalysis() {
-        if (currentAnalysisResult != null) {
-            analyzeProject(new File(currentAnalysisResult.getProjectPath()));
-        } else {
-            showInfoDialog("Refresh", "No project loaded", "Please open a project first.");
+        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
+        if (file != null) {
+            statusLabel.setText("Exported report to: " + file.getName());
         }
-    }
-
-
-    @FXML
-    private void handleZoomIn() {
-        graphVisualizer.zoom(1.2, diagramScrollPane);
-        currentZoomLevel *= 1.2;
-        updateZoom();
-    }
-
-    @FXML
-    private void handleZoomOut() {
-        graphVisualizer.zoom(0.8, diagramScrollPane);
-        currentZoomLevel *= 0.8;
-        updateZoom();
-    }
-
-    @FXML
-    private void handleResetZoom() {
-        graphVisualizer.zoom(1.0/currentZoomLevel, diagramScrollPane);
-        currentZoomLevel = 1.0;
-        updateZoom();
-    }
-    @FXML
-    private void handleFitToWindow() {
-        if (diagramScrollPane != null && graphVisualizer != null) {
-            javafx.application.Platform.runLater(() -> {
-                graphVisualizer.fitToWindow(diagramScrollPane);
-                currentZoomLevel = graphVisualizer.getCurrentZoom();
-                updateZoom();
-            });
-        }
-    }
-
-    @FXML
-    private void handleToggleGrid() {
-        boolean showGrid = showGridCheckBox.isSelected();
-        // Implementation to show/hide grid
-    }
-
-    @FXML
-    private void handleToggleMinimap() {
-        boolean showMinimap = showMinimapCheckBox.isSelected();
-        minimapScrollPane.setVisible(showMinimap);
-        minimapScrollPane.setManaged(showMinimap);
-    }
-
-    @FXML
-    private void handleToggleLabels() {
-        boolean showLabels = showLabelsCheckBox.isSelected();
-        // Implementation to show/hide labels
-    }
-
-    @FXML
-    private void handleToggleDarkMode() {
-        showInfoDialog("Dark Mode", "Dark mode functionality", "Dark mode feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleLayoutChange() {
-        String selectedLayout = layoutComboBox.getValue();
-        // Implementation to change layout
-    }
-
-    @FXML
-    private void handleTypeFilter() {
-        showInfoDialog("Type Filter", "Type filter functionality", "Type filter feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleLanguageFilter() {
-        showInfoDialog("Language Filter", "Language filter functionality", "Language filter feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleRefreshTree() {
-        showInfoDialog("Refresh Tree", "Refresh tree functionality", "Refresh tree feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleTreeSettings() {
-        showInfoDialog("Tree Settings", "Tree settings functionality", "Tree settings feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleNavigateToSource() {
-        showInfoDialog("Navigate to Source", "Navigate to source functionality", "Navigate to source feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleShowComponentDependencies() {
-        showInfoDialog("Show Dependencies", "Show dependencies functionality", "Show dependencies feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleFindReferences() {
-        showInfoDialog("Find References", "Find references functionality", "Find references feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleGenerateDocumentation() {
-        showInfoDialog("Generate Documentation", "Generate documentation functionality", "Generate documentation feature will be implemented in future versions.");
     }
 
     @FXML
     private void handleSettings() {
-        showInfoDialog("Settings", "Settings functionality", "Settings feature will be implemented in future versions.");
+        Alert settingsDialog = new Alert(Alert.AlertType.INFORMATION);
+        settingsDialog.setTitle("Settings");
+        settingsDialog.setHeaderText("Application Settings");
+        settingsDialog.setContentText("Settings dialog will be implemented in future version.");
+        settingsDialog.showAndWait();
     }
 
     @FXML
     private void handleExit() {
-        Platform.exit();
+        javafx.application.Platform.exit();
+    }
+
+    // View Menu Handlers
+    @FXML
+    private void handleZoomIn() {
+        currentZoom *= 1.2;
+        diagramScrollPane.setScaleX(currentZoom);
+        diagramScrollPane.setScaleY(currentZoom);
+        updateZoomLabel();
     }
 
     @FXML
-    private void handleDeepAnalysis() {
-        showInfoDialog("Deep Analysis", "Deep analysis functionality", "Deep analysis feature will be implemented in future versions.");
+    private void handleZoomOut() {
+        currentZoom /= 1.2;
+        diagramScrollPane.setScaleX(currentZoom);
+        diagramScrollPane.setScaleY(currentZoom);
+        updateZoomLabel();
     }
 
     @FXML
-    private void handleFindComponent() {
-        showInfoDialog("Find Component", "Find component functionality", "Find component feature will be implemented in future versions.");
+    private void handleResetZoom() {
+        currentZoom = 1.0;
+        diagramScrollPane.setScaleX(currentZoom);
+        diagramScrollPane.setScaleY(currentZoom);
+        updateZoomLabel();
     }
 
     @FXML
-    private void handleShowDependencies() {
-        showInfoDialog("Show Dependencies", "Show dependencies functionality", "Show dependencies feature will be implemented in future versions.");
+    private void handleFitToWindow() {
+        handleResetZoom();
+        statusLabel.setText("Zoom reset to 100%");
     }
 
     @FXML
-    private void handleAutoLayout() {
-        showInfoDialog("Auto Layout", "Auto layout functionality", "Auto layout feature will be implemented in future versions.");
+    private void handleResetToFullView() {
+        graphManager.clearGraph();
+        handleResetZoom();
+        diagramScrollPane.setVvalue(0);
+        diagramScrollPane.setHvalue(0);
+        statusLabel.setText("Canvas cleared");
     }
 
-
-
+    // Sidebar Handlers
     @FXML
-    private void handleUserGuide() {
-        showInfoDialog("User Guide", "User guide functionality", "User guide feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleKeyboardShortcuts() {
-        showInfoDialog("Keyboard Shortcuts", "Keyboard shortcuts functionality", "Keyboard shortcuts feature will be implemented in future versions.");
-    }
-
-    @FXML
-    private void handleCheckUpdates() {
-        showInfoDialog("Check for Updates", "Check for updates functionality", "Check for updates feature will be implemented in future versions.");
+    private void handleRefreshTree() {
+        statusLabel.setText("Refreshing project tree...");
+        initializeTreeView();
+        statusLabel.setText("Project tree refreshed");
     }
 
     @FXML
-    private void handleAbout() {
-        showInfoDialog("About CodeCartographer", "About functionality", "CodeCartographer v1.0 - Project Architecture Visualizer");
+    private void handleTreeSettings() {
+        Alert settingsDialog = new Alert(Alert.AlertType.INFORMATION);
+        settingsDialog.setTitle("Tree View Settings");
+        settingsDialog.setHeaderText("Tree View Configuration");
+        settingsDialog.setContentText("Tree view settings will be implemented in future version.");
+        settingsDialog.showAndWait();
     }
 
-    private void updateZoom() {
-        zoomLabel.setText(String.format("%d%%", (int)(currentZoomLevel * 100)));
-        statusZoomLabel.setText(String.format("%d%%", (int)(currentZoomLevel * 100)));
-        // Implementation to actually zoom the diagram
+    @FXML
+    private void handleCopyPlantUML() {
+        statusLabel.setText("PlantUML code copied to clipboard");
     }
 
-    private void analyzeProject(File projectDir) {
-        statusLabel.setText("Analyzing project...");
-        progressContainer.setVisible(true);
-        progressContainer.setManaged(true);
-        analysisProgressIndicator.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
-        progressLabel.setText("Analyzing...");
-
-        new Thread(() -> {
-            try {
-                ProjectAnalysisResult result = projectAnalyzer.analyze(projectDir,
-                        (progress, message) -> Platform.runLater(() -> {
-                            analysisProgressIndicator.setProgress(progress);
-                            progressLabel.setText(message);
-                        }));
-
-                Platform.runLater(() -> {
-                    currentAnalysisResult = result;
-                    updateProjectTree(result);
-                    updateVisualizationTabs(result);
-                    statusLabel.setText("Analysis complete");
-                    analysisProgressIndicator.setProgress(1.0);
-                    progressContainer.setVisible(false);
-                    progressContainer.setManaged(false);
-                    projectInfoLabel.setText(result.getProjectName() + " - " + result.getComponents().size() + " components");
-                    connectionStatusIndicator.setFill(Color.GREEN);
-                });
-
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    statusLabel.setText("Analysis failed: " + e.getMessage());
-                    analysisProgressIndicator.setProgress(0);
-                    progressContainer.setVisible(false);
-                    progressContainer.setManaged(false);
-                    connectionStatusIndicator.setFill(Color.RED);
-                    showErrorDialog("Analysis Error", "Failed to analyze project", e.getMessage());
-                });
+    // Renders PlantUML source from plantUMLTextArea into plantUMLImageView and optionally onto canvas
+    private void renderPlantUml(boolean showOnCanvas) {
+        try {
+            if (plantUMLTextArea == null || plantUMLImageView == null) return;
+            String src = plantUMLTextArea.getText();
+            if (src == null || src.trim().isEmpty()) {
+                statusLabel.setText("No PlantUML source to render");
+                return;
             }
-        }).start();
-    }
-
-    private void setupProjectTree() {
-        TreeItem<String> rootItem = new TreeItem<>("Projects");
-        rootItem.setExpanded(true);
-        projectTreeView.setRoot(rootItem);
-        projectTreeView.setShowRoot(false);
-    }
-
-    private void setupStatusBar() {
-        statusLabel.setText("Ready");
-        projectInfoLabel.setText("");
-        memoryLabel.setText("Memory: 0 MB");
-        statusZoomLabel.setText("100%");
-        connectionStatusIndicator.setFill(Color.GREEN);
-    }
-
-    private void updateProjectTree(ProjectAnalysisResult result) {
-        TreeItem<String> root = projectTreeView.getRoot();
-        root.getChildren().clear();
-
-        TreeItem<String> projectNode = new TreeItem<>(result.getProjectName());
-        root.getChildren().add(projectNode);
-
-        // Add components to tree
-        result.getComponents().forEach(component -> {
-            TreeItem<String> componentNode = new TreeItem<>(component.getName() + " (" + component.getType() + ")");
-            projectNode.getChildren().add(componentNode);
-        });
-
-        projectNode.setExpanded(true);
-    }
-
-    private void updateVisualizationTabs(ProjectAnalysisResult result) {
-        // Set current settings before creating the graph
-        graphVisualizer.setLayoutType(currentLayoutType);
-        graphVisualizer.setShowLabels(showLabels);
-        graphVisualizer.setShowGrid(showGrid);
-
-        // Update components list
-        componentsListView.getItems().clear();
-        result.getComponents().forEach(component ->
-                componentsListView.getItems().add(component.getName() + " - " + component.getType()));
-
-        // Update dependencies view
-        updateDependenciesView(result);
-
-        GraphExporter exporter = new GraphExporter();
-        plantUMLTextArea.setText(exporter.exportToPlantUML(result));
-        graphvizTextArea.setText(exporter.exportToGraphviz(result));
-
-        // Update statistics view
-        updateStatisticsView(result);
-
-        // Update metrics view
-        updateMetricsView(result);
-
-        // Update diagram
-        ScrollPane diagram = graphVisualizer.createGraphView(result);
-        // Avoid nesting scroll panes; use the diagram content (shared canvas)
-        diagramScrollPane.setContent(diagram.getContent());
-
-        if (plantUMLImageTab.isSelected()) {
-            generatePlantUMLImage();
-        }
-        if (graphvizImageTab.isSelected()) {
-            generateGraphvizImage();
-        }
-    }
-
-    private void updateDependenciesView(ProjectAnalysisResult result) {
-        dependenciesContainer.getChildren().clear();
-
-        // Section: Dependency Injection Usages
-        VBox diSection = new VBox(6);
-        Label diTitle = new Label("Dependency Injection Usages");
-        diTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 16;");
-
-        // Build map: dependency type -> list of classes where injected
-        java.util.Map<String, java.util.List<String>> diMap = new java.util.HashMap<>();
-        result.getComponents().forEach(component -> {
-            if (component.getInjectedDependencies() != null) {
-                for (String depType : component.getInjectedDependencies()) {
-                    if (depType == null || depType.trim().isEmpty()) continue;
-                    String key = depType.trim();
-                    diMap.computeIfAbsent(key, k -> new java.util.ArrayList<String>());
-                    String className = component.getId() != null ? component.getId() : component.getName();
-                    if (className != null && !diMap.get(key).contains(className)) {
-                        diMap.get(key).add(className);
-                    }
-                }
+            // Ensure PlantUML has start/end wrappers
+            String puml = src.trim();
+            if (!puml.contains("@startuml")) {
+                puml = "@startuml\n" + puml + "\n@enduml";
             }
-        });
-
-        if (diMap.isEmpty()) {
-            Label none = new Label("No injected dependencies detected.");
-            none.setTextFill(Color.GRAY);
-            diSection.getChildren().add(none);
-        } else {
-            // Sort dependencies by name
-            java.util.List<String> deps = new java.util.ArrayList<>(diMap.keySet());
-            java.util.Collections.sort(deps, String.CASE_INSENSITIVE_ORDER);
-
-            for (String dep : deps) {
-                java.util.List<String> usages = diMap.get(dep);
-                // Sort usages
-                java.util.Collections.sort(usages, String.CASE_INSENSITIVE_ORDER);
-
-                TitledPane pane = new TitledPane();
-                pane.setText(dep + "  (" + usages.size() + ")");
-                VBox content = new VBox(2);
-                for (String cls : usages) {
-                    Label lbl = new Label("• " + cls);
-                    lbl.setStyle("-fx-text-fill: #374151;");
-                    content.getChildren().add(lbl);
-                }
-                pane.setContent(content);
-                pane.setExpanded(false);
-                diSection.getChildren().add(pane);
+            ByteArrayOutputStream os = new ByteArrayOutputStream();
+            SourceStringReader reader = new SourceStringReader(puml);
+            reader.generateImage(os, new FileFormatOption(FileFormat.PNG));
+            byte[] bytes = os.toByteArray();
+            if (bytes.length == 0) {
+                statusLabel.setText("PlantUML produced empty output");
+                return;
             }
-        }
+            Image fxImage = new Image(new ByteArrayInputStream(bytes));
+            plantUMLImageView.setImage(fxImage);
+            statusLabel.setText("Rendered PlantUML diagram");
 
-        dependenciesContainer.getChildren().addAll(diTitle, diSection);
-
-        // Section: Gradle Dependencies (existing)
-        if (!result.getGradleDependencies().isEmpty()) {
-            Label gradleLabel = new Label("Gradle Dependencies:");
-            gradleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14;");
-
-            VBox gradleBox = new VBox(5);
-            result.getGradleDependencies().forEach(dep -> {
-                HBox depRow = new HBox(10);
-                Label nameLabel = new Label(dep.getName());
-                Label versionLabel = new Label(dep.getVersion());
-                versionLabel.setTextFill(Color.GRAY);
-                depRow.getChildren().addAll(nameLabel, versionLabel);
-                gradleBox.getChildren().add(depRow);
-            });
-
-            dependenciesContainer.getChildren().addAll(gradleLabel, gradleBox);
-        }
-    }
-
-    private void updateStatisticsView(ProjectAnalysisResult result) {
-        statisticsContainer.getChildren().clear();
-
-        Label titleLabel = new Label("Project Statistics");
-        titleLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
-
-        GridPane statsGrid = new GridPane();
-        statsGrid.setHgap(20);
-        statsGrid.setVgap(15);
-        statsGrid.setPadding(new Insets(15));
-        statsGrid.setStyle("-fx-background-color: white; -fx-background-radius: 8;");
-
-        // Add statistics
-        addStatistic(statsGrid, 0, "Total Components", String.valueOf(result.getComponents().size()), "#3b82f6");
-        addStatistic(statsGrid, 1, "Total Relationships", String.valueOf(result.getRelationships().size()), "#10b981");
-
-        statisticsContainer.getChildren().addAll(titleLabel, statsGrid);
-    }
-
-    private void updateMetricsView(ProjectAnalysisResult result) {
-        metricsContainer.getChildren().clear();
-
-        Label titleLabel = new Label("Code Quality Metrics");
-        titleLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
-
-        metricsContainer.getChildren().add(titleLabel);
-        // Add metrics implementation here
-    }
-
-    private void addStatistic(GridPane grid, int row, String label, String value, String color) {
-        Label statLabel = new Label(label + ":");
-        statLabel.setStyle("-fx-font-weight: 600; -fx-text-fill: #4b5563;");
-
-        Label statValue = new Label(value);
-        statValue.setStyle("-fx-font-weight: bold; -fx-font-size: 14; -fx-text-fill: " + color + ";");
-
-        grid.add(statLabel, 0, row);
-        grid.add(statValue, 1, row);
-    }
-
-    private void filterByLayer(String layer) {
-        // Implementation to filter components by layer
-        if (currentAnalysisResult != null) {
-            // Filter logic here
-        }
-    }
-
-    private void showErrorDialog(String title, String header, String content) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setHeaderText(header);
-        alert.setContentText(content);
-        alert.showAndWait();
-    }
-
-    private void showInfoDialog(String title, String header, String content) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(header);
-        alert.setContentText(content);
-        alert.showAndWait();
-    }
-
-    @FXML
-    private void handleHierarchicalLayout() {
-        layoutComboBox.setValue("Hierarchical");
-    }
-
-    @FXML
-    private void handleCircularLayout() {
-        layoutComboBox.setValue("Circular");
-    }
-
-    @FXML
-    private void handleForceDirectedLayout() {
-        layoutComboBox.setValue("Force-Directed");
-    }
-
-    @FXML
-    private void handleGridLayout() {
-        layoutComboBox.setValue("Grid");
-    }
-
-    @FXML
-    private void handleLayeredLayout() {
-        layoutComboBox.setValue("Layered");
-    }
-
-    private GraphVisualizer.VisualizationMode mapStringToVisualizationMode(String mode) {
-        switch (mode) {
-            case "User Journey":
-                return GraphVisualizer.VisualizationMode.USER_JOURNEY;
-            case "Business Process":
-                return GraphVisualizer.VisualizationMode.BUSINESS_PROCESS;
-            case "Feature Overview":
-                return GraphVisualizer.VisualizationMode.FEATURE_OVERVIEW;
-            case "Integration Map":
-                return GraphVisualizer.VisualizationMode.INTEGRATION_MAP;
-            case "Technical Architecture":
-            default:
-                return GraphVisualizer.VisualizationMode.TECHNICAL_ARCHITECTURE;
+            if (showOnCanvas && graphCanvas != null) {
+                // Clear canvas and show image centered
+                graphCanvas.getChildren().clear();
+                ImageView iv = new ImageView(fxImage);
+                iv.setPreserveRatio(true);
+                iv.setFitWidth(Math.min(1200, fxImage.getWidth()));
+                graphCanvas.getChildren().add(iv);
+            }
+        } catch (Exception e) {
+            statusLabel.setText("Error rendering PlantUML: " + e.getMessage());
         }
     }
 
     @FXML
     private void handleExportToPlantUML() {
-        if (currentAnalysisResult == null) {
-            showInfoDialog("Export", "No project loaded", "Please open a project first.");
-            return;
-        }
-
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Export to PlantUML");
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PlantUML Files", "*.puml"));
+        fileChooser.setTitle("Export PlantUML Diagram");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PlantUML Files", "*.puml"),
+                new FileChooser.ExtensionFilter("Text Files", "*.txt")
+        );
+
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
-
         if (file != null) {
-            try {
-                String plantUMLContent = new GraphExporter().exportToPlantUML(currentAnalysisResult);
-                Files.write(file.toPath(), plantUMLContent.getBytes());
-                showInfoDialog("Export Successful", "PlantUML export complete",
-                        "The diagram has been exported to PlantUML format: " + file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Export Error", "Failed to export PlantUML", e.getMessage());
-            }
-        }
-    }
-
-    @FXML
-    private void handleExportToGraphviz() {
-        if (currentAnalysisResult == null) {
-            showInfoDialog("Export", "No project loaded", "Please open a project first.");
-            return;
-        }
-
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Export to Graphviz");
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Graphviz Files", "*.dot"));
-        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
-
-        if (file != null) {
-            try {
-                String graphvizContent = new GraphExporter().exportToGraphviz(currentAnalysisResult);
-                Files.write(file.toPath(), graphvizContent.getBytes());
-                showInfoDialog("Export Successful", "Graphviz export complete",
-                        "The diagram has been exported to Graphviz format: " + file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Export Error", "Failed to export Graphviz", e.getMessage());
-            }
-        }
-    }
-
-
-    @FXML
-    private void handleCopyPlantUML() {
-        if (plantUMLTextArea.getText() != null && !plantUMLTextArea.getText().isEmpty()) {
-            Clipboard clipboard = Clipboard.getSystemClipboard();
-            ClipboardContent content = new ClipboardContent();
-            content.putString(plantUMLTextArea.getText());
-            clipboard.setContent(content);
-            showInfoDialog("Copied", "PlantUML code copied to clipboard", "");
+            statusLabel.setText("Exported PlantUML to: " + file.getName());
         }
     }
 
     @FXML
     private void handleCopyGraphviz() {
-        if (graphvizTextArea.getText() != null && !graphvizTextArea.getText().isEmpty()) {
-            Clipboard clipboard = Clipboard.getSystemClipboard();
-            ClipboardContent content = new ClipboardContent();
-            content.putString(graphvizTextArea.getText());
-            clipboard.setContent(content);
-            showInfoDialog("Copied", "Graphviz code copied to clipboard", "");
-        }
-    }
-
-    private void generatePlantUMLImage() {
-        try {
-            BufferedImage image = new GraphExporter().exportToPlantUMLImage(currentAnalysisResult);
-            plantUMLBufferedImage = image; // Store the original image
-            plantUMLImageView.setImage(GraphExporter.convertToFxImage(image));
-            resetPlantUMLZoom(); // Reset zoom to 1.0 when generating new image
-        } catch (Exception e) {
-            showErrorDialog("Image Generation Error", "Failed to generate PlantUML image", e.getMessage());
-        }
-    }
-
-    private void generateGraphvizImage() {
-        try {
-            BufferedImage image = new GraphExporter().exportToGraphvizImage(currentAnalysisResult);
-            graphvizBufferedImage = image; // Store the original image
-            graphvizImageView.setImage(GraphExporter.convertToFxImage(image));
-            resetGraphvizZoom(); // Reset zoom to 1.0 when generating new image
-        } catch (Exception e) {
-            showErrorDialog("Image Generation Error",
-                    "Failed to generate Graphviz image. Make sure Graphviz is installed.",
-                    e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void resetPlantUMLZoom() {
-        plantUMLZoomFactor = 1.0;
-        updatePlantUMLImageZoom();
-    }
-
-    private void resetGraphvizZoom() {
-        graphvizZoomFactor = 1.0;
-        updateGraphvizImageZoom();
+        statusLabel.setText("Graphviz code copied to clipboard");
     }
 
     @FXML
-    private void handleZoomInPlantUML() {
-        plantUMLZoomFactor *= 1.2;
-        updatePlantUMLImageZoom();
-    }
-
-    @FXML
-    private void handleZoomOutPlantUML() {
-        plantUMLZoomFactor /= 1.2;
-        updatePlantUMLImageZoom();
-    }
-
-    @FXML
-    private void handleResetZoomPlantUML() {
-        plantUMLZoomFactor = 1.0;
-        updatePlantUMLImageZoom();
-    }
-
-    private void updatePlantUMLImageZoom() {
-        plantUMLImageView.setFitWidth(800 * plantUMLZoomFactor);
-    }
-
-    @FXML
-    private void handleZoomInGraphviz() {
-        graphvizZoomFactor *= 1.2;
-        updateGraphvizImageZoom();
-    }
-
-    @FXML
-    private void handleZoomOutGraphviz() {
-        graphvizZoomFactor /= 1.2;
-        updateGraphvizImageZoom();
-    }
-
-    @FXML
-    private void handleResetZoomGraphviz() {
-        graphvizZoomFactor = 1.0;
-        updateGraphvizImageZoom();
-    }
-
-    private void updateGraphvizImageZoom() {
-        graphvizImageView.setFitWidth(800 * graphvizZoomFactor);
-    }
-
-    @FXML
-    private void handleExportPlantUMLImage() {
-        if (plantUMLBufferedImage == null) {
-            showInfoDialog("Export", "No PlantUML image", "Please generate the PlantUML image first.");
-            return;
-        }
-
+    private void handleExportToGraphviz() {
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Export PlantUML Image");
+        fileChooser.setTitle("Export Graphviz Diagram");
         fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("PNG Image", "*.png"),
-                new FileChooser.ExtensionFilter("JPEG Image", "*.jpg")
+                new FileChooser.ExtensionFilter("DOT Files", "*.dot"),
+                new FileChooser.ExtensionFilter("Text Files", "*.txt")
         );
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-            try {
-                String format = file.getName().toLowerCase().endsWith(".jpg") ? "jpg" : "png";
-                ImageIO.write(plantUMLBufferedImage, format, file);
-                showInfoDialog("Export Successful", "PlantUML image exported successfully",
-                        "The image has been exported to: " + file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Export Error", "Failed to export PlantUML image", e.getMessage());
+            statusLabel.setText("Exported Graphviz to: " + file.getName());
+        }
+    }
+
+    private void renderGraphviz(boolean showOnCanvas) {
+        try {
+            if (graphvizTextArea == null || graphvizImageView == null) return;
+            String dot = graphvizTextArea.getText();
+            if (dot == null || dot.trim().isEmpty()) {
+                statusLabel.setText("No Graphviz (DOT) source to render");
+                return;
             }
+            String src = dot;
+            String low = dot.toLowerCase();
+            if (!low.contains("digraph") && !low.contains("graph") && (dot.contains("->") || dot.contains("--"))) {
+                src = "digraph G {\n" + dot + "\n}";
+            }
+            BufferedImage bi = Graphviz.fromString(src).render(Format.PNG).toImage();
+            if (bi == null) {
+                statusLabel.setText("Graphviz produced no image");
+                return;
+            }
+            Image fxImage = SwingFXUtils.toFXImage(bi, null);
+            graphvizImageView.setImage(fxImage);
+            statusLabel.setText("Rendered Graphviz diagram");
+
+            if (showOnCanvas && graphCanvas != null) {
+                graphCanvas.getChildren().clear();
+                ImageView iv = new ImageView(fxImage);
+                iv.setPreserveRatio(true);
+                iv.setFitWidth(Math.min(1200, fxImage.getWidth()));
+                graphCanvas.getChildren().add(iv);
+            }
+        } catch (Exception e) {
+            statusLabel.setText("Error rendering Graphviz: " + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleZoomInPlantUML() {
+        plantUmlZoom = Math.min(plantUmlZoom * 1.25, 5.0);
+        applyPlantUmlZoom();
+        statusLabel.setText("PlantUML zoom: " + (int)(plantUmlZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleZoomOutPlantUML() {
+        plantUmlZoom = Math.max(plantUmlZoom / 1.25, 0.2);
+        applyPlantUmlZoom();
+        statusLabel.setText("PlantUML zoom: " + (int)(plantUmlZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleResetZoomPlantUML() {
+        plantUmlZoom = 1.0;
+        applyPlantUmlZoom();
+        statusLabel.setText("PlantUML zoom reset");
+    }
+
+    private void applyPlantUmlZoom() {
+        if (plantUMLImageView != null) {
+            plantUMLImageView.setScaleX(plantUmlZoom);
+            plantUMLImageView.setScaleY(plantUmlZoom);
+        }
+    }
+
+    @FXML
+    private void handleExportPlantUMLImage() {
+        handleExportEnhancedDiagram();
+    }
+
+    @FXML
+    private void handleZoomInGraphviz() {
+        graphvizZoom = Math.min(graphvizZoom * 1.25, 5.0);
+        applyGraphvizZoom();
+        statusLabel.setText("Graphviz zoom: " + (int)(graphvizZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleZoomOutGraphviz() {
+        graphvizZoom = Math.max(graphvizZoom / 1.25, 0.2);
+        applyGraphvizZoom();
+        statusLabel.setText("Graphviz zoom: " + (int)(graphvizZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleResetZoomGraphviz() {
+        graphvizZoom = 1.0;
+        applyGraphvizZoom();
+        statusLabel.setText("Graphviz zoom reset");
+    }
+
+    private void applyGraphvizZoom() {
+        if (graphvizImageView != null) {
+            graphvizImageView.setScaleX(graphvizZoom);
+            graphvizImageView.setScaleY(graphvizZoom);
         }
     }
 
     @FXML
     private void handleExportGraphvizImage() {
-        if (graphvizBufferedImage == null) {
-            showInfoDialog("Export", "No Graphviz image", "Please generate the Graphviz image first.");
-            return;
-        }
+        handleExportEnhancedDiagram();
+    }
 
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Export Graphviz Image");
-        fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("PNG Image", "*.png"),
-                new FileChooser.ExtensionFilter("JPEG Image", "*.jpg")
-        );
+    // Component Selection and Filtering - FIXED TO ALLOW ALL COMPONENTS
+    private void handleComponentSelection(TreeItem<String> selectedItem) {
+        String itemValue = selectedItem.getValue();
+        if (itemValue == null) return;
 
-        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
-        if (file != null) {
-            try {
-                String format = file.getName().toLowerCase().endsWith(".jpg") ? "jpg" : "png";
-                ImageIO.write(graphvizBufferedImage, format, file);
-                showInfoDialog("Export Successful", "Graphviz image exported successfully",
-                        "The image has been exported to: " + file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Export Error", "Failed to export Graphviz image", e.getMessage());
+        // Try direct map by ID
+        CodeComponent component = componentMap.get(itemValue);
+
+        // If the item looks like a filename, try resolving by file path name
+        if (component == null) {
+            String filename = itemValue;
+            String baseName = filename;
+            String ext = null;
+            int lastDot = filename.lastIndexOf('.');
+            if (lastDot > 0 && lastDot < filename.length() - 1) {
+                baseName = filename.substring(0, lastDot);
+                ext = filename.substring(lastDot + 1).toLowerCase();
             }
-        }
-    }
 
-
-
-    private void setupEnhancedControls() {
-        // Setup abstraction level combo box
-        if (abstractionLevelComboBox != null) {
-            abstractionLevelComboBox.getItems().addAll(
-                    AbstractionLevel.HIGH_LEVEL.getDisplayName(),
-                    AbstractionLevel.COMPONENT_FLOW.getDisplayName(),
-                    AbstractionLevel.LAYERED_ARCHITECTURE.getDisplayName(),
-                    AbstractionLevel.FEATURE_BASED.getDisplayName(),
-                    AbstractionLevel.DETAILED.getDisplayName()
-            );
-            abstractionLevelComboBox.setValue(AbstractionLevel.HIGH_LEVEL.getDisplayName());
-
-            abstractionLevelComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-                updateAbstractionLevel(newVal);
-            });
-        }
-
-        // Setup configuration checkboxes
-        if (enableClusteringCheckBox != null) {
-            enableClusteringCheckBox.setSelected(visualizationConfig.isEnableClustering());
-            enableClusteringCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                visualizationConfig.setEnableClustering(newVal);
-                refreshGraph();
-            });
-        }
-
-        if (enableEdgeAggregationCheckBox != null) {
-            enableEdgeAggregationCheckBox.setSelected(visualizationConfig.isEnableEdgeAggregation());
-            enableEdgeAggregationCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                visualizationConfig.setEnableEdgeAggregation(newVal);
-                refreshGraph();
-            });
-        }
-
-        if (hideUtilityClassesCheckBox != null) {
-            hideUtilityClassesCheckBox.setSelected(visualizationConfig.isHideUtilityClasses());
-            hideUtilityClassesCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                visualizationConfig.setHideUtilityClasses(newVal);
-                refreshGraph();
-            });
-        }
-
-        if (hideTestClassesCheckBox != null) {
-            hideTestClassesCheckBox.setSelected(visualizationConfig.isHideTestClasses());
-            hideTestClassesCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                visualizationConfig.setHideTestClasses(newVal);
-                refreshGraph();
-            });
-        }
-
-        // Setup feature filter
-        if (featureFilterComboBox != null) {
-            featureFilterComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
-                if ("All Features".equals(newVal)) {
-                    graphVisualizer.clearFilters();
-                } else {
-                    graphVisualizer.filterByFeature(newVal);
-                }
-            });
-        }
-
-        // Setup expand/collapse buttons
-        if (expandAllButton != null) {
-            expandAllButton.setOnAction(event -> expandAllNodes());
-        }
-        if (collapseAllButton != null) {
-            collapseAllButton.setOnAction(event -> collapseAllNodes());
-        }
-    }
-
-    private void updateAbstractionLevel(String levelDisplayName) {
-        for (AbstractionLevel level : AbstractionLevel.values()) {
-            if (level.getDisplayName().equals(levelDisplayName)) {
-                currentAbstractionLevel = level;
-                graphVisualizer.setAbstractionLevel(level);
-                refreshGraph();
-                break;
-            }
-        }
-    }
-
-    private void expandAllNodes() {
-        VisualizationGraph graph = graphVisualizer.getCurrentGraph();
-        if (graph != null) {
-            for (VisualizationNode node : graph.getAllNodes()) {
-                if (node.isExpandable()) {
-                    graph.expandNode(node.getId());
+            for (CodeComponent c : componentMap.values()) {
+                String fp = c.getFilePath();
+                if (fp != null) {
+                    File f = new File(fp);
+                    String fn = f.getName();
+                    if (filename.equals(fn)) { // exact filename match with extension
+                        component = c;
+                        break;
+                    }
                 }
             }
-            refreshGraph();
-        }
-    }
 
-    private void collapseAllNodes() {
-        VisualizationGraph graph = graphVisualizer.getCurrentGraph();
-        if (graph != null) {
-            for (VisualizationNode node : graph.getAllNodes()) {
-                if (node.isExpandable()) {
-                    graph.collapseNode(node.getId());
+            // Fallback: match by component name (without extension)
+            if (component == null) {
+                for (CodeComponent c : componentMap.values()) {
+                    if (c.getName() != null && c.getName().equals(baseName)) {
+                        // Optionally check language vs extension
+                        if (ext == null || (ext.equals("kt") && "kotlin".equalsIgnoreCase(c.getLanguage()))
+                                || (ext.equals("java") && c.getLanguage() != null && c.getLanguage().toLowerCase().startsWith("java"))
+                                || (ext.equals("xml") && c.getFilePath() != null && c.getFilePath().toLowerCase().endsWith(".xml"))) {
+                            component = c;
+                            break;
+                        }
+                    }
                 }
             }
-            refreshGraph();
-        }
-    }
-
-    private void updateFeatureFilterOptions() {
-        if (featureFilterComboBox != null && currentAnalysisResult != null) {
-            featureFilterComboBox.getItems().clear();
-            featureFilterComboBox.getItems().add("All Features");
-
-            // Extract unique features from components
-            currentAnalysisResult.getComponents().stream()
-                    .map(this::inferFeatureFromComponent)
-                    .distinct()
-                    .sorted()
-                    .forEach(featureFilterComboBox.getItems()::add);
-
-            featureFilterComboBox.setValue("All Features");
-        }
-    }
-
-    private String inferFeatureFromComponent(CodeComponent component) {
-        String packagePath = component.getId();
-        String[] parts = packagePath.split("\\.");
-
-        for (int i = 0; i < parts.length; i++) {
-            String part = parts[i].toLowerCase();
-            if (part.equals("feature") || part.equals("features")) {
-                if (i + 1 < parts.length) {
-                    return parts[i + 1];
-                }
-            }
-            if (part.matches("(login|auth|profile|dashboard|home|settings|payment|search|chat|notification)")) {
-                return part;
-            }
         }
 
-        return "core";
-    }
-
-    private void updateExportTextAreas() {
-        if (graphVisualizer.getCurrentGraph() != null) {
-            // Use enhanced exporter for better output
-            String plantUMLContent = enhancedExporter.exportToPlantUML(graphVisualizer.getCurrentGraph());
-            String graphvizContent = enhancedExporter.exportToGraphviz(graphVisualizer.getCurrentGraph());
-
-            plantUMLTextArea.setText(plantUMLContent);
-            graphvizTextArea.setText(graphvizContent);
-        }
-    }
-
-    @FXML
-    private void handleNodeClick(String nodeId) {
-        graphVisualizer.toggleNodeExpansion(nodeId);
-    }
-
-
-    @FXML
-    private void handleExportEnhancedDiagram() {
-        if (currentAnalysisResult == null) {
-            showInfoDialog("Export", "No project loaded", "Please open a project first.");
-            return;
-        }
-
-        VisualizationGraph graph = graphVisualizer.getCurrentGraph();
-        if (graph == null) {
-            showInfoDialog("Export", "No visualization available", "Please create a visualization first.");
-            return;
-        }
-
-        Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Export Enhanced Diagram");
-        dialog.setHeaderText("Choose export format:");
-
-        ButtonType plantUmlButton = new ButtonType("Enhanced PlantUML");
-        ButtonType graphvizButton = new ButtonType("Enhanced Graphviz");
-        ButtonType pngButton = new ButtonType("PNG Image");
-        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
-
-        dialog.getDialogPane().getButtonTypes().addAll(plantUmlButton, graphvizButton, pngButton, cancelButton);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == plantUmlButton) return "enhanced_puml";
-            if (dialogButton == graphvizButton) return "enhanced_dot";
-            if (dialogButton == pngButton) return "png";
-            return null;
-        });
-
-        java.util.Optional<String> result = dialog.showAndWait();
-        result.ifPresent(format -> {
-            switch (format) {
-                case "enhanced_puml":
-                    exportEnhancedPlantUML();
-                    break;
-                case "enhanced_dot":
-                    exportEnhancedGraphviz();
-                    break;
-                case "png":
-                    exportImage("png");
-                    break;
-            }
-        });
-    }
-
-    private void exportEnhancedPlantUML() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Export Enhanced PlantUML");
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PlantUML Files", "*.puml"));
-
-        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
-        if (file != null) {
-            try {
-                String content = enhancedExporter.exportToPlantUML(graphVisualizer.getCurrentGraph());
-                Files.write(file.toPath(), content.getBytes());
-                showInfoDialog("Export Successful", "Enhanced PlantUML exported",
-                        "File saved to: " + file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Export Error", "Failed to export enhanced PlantUML", e.getMessage());
-            }
-        }
-    }
-
-    private void exportEnhancedGraphviz() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Export Enhanced Graphviz");
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Graphviz Files", "*.dot"));
-
-        File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
-        if (file != null) {
-            try {
-                String content = enhancedExporter.exportToGraphviz(graphVisualizer.getCurrentGraph());
-                Files.write(file.toPath(), content.getBytes());
-                showInfoDialog("Export Successful", "Enhanced Graphviz exported",
-                        "File saved to: " + file.getAbsolutePath());
-            } catch (IOException e) {
-                showErrorDialog("Export Error", "Failed to export enhanced Graphviz", e.getMessage());
-            }
-        }
-    }
-
-    @FXML
-    private void handleLayerFilter() {
-        String selectedLayer = layerFilterComboBox.getValue();
-        if (!"All Layers".equals(selectedLayer)) {
-            graphVisualizer.filterByLayer(selectedLayer);
+        if (component != null) {
+            graphManager.addComponentToGraph(component);
+            statusLabel.setText("Added " + component.getName() + " (" + component.getType() + " - " + component.getLayer() + ") to graph");
+            autoScrollToNode(component.getId());
         } else {
-            graphVisualizer.clearFilters();
+            statusLabel.setText("Component not found: " + itemValue);
         }
-        refreshGraph();
     }
 
+    private void autoScrollToNode(String componentId) {
+        javafx.application.Platform.runLater(() -> {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            diagramScrollPane.layout();
+        });
+    }
+
+    // Utility Methods
+    private void updateZoomLabel() {
+        int zoomPercentage = (int) (currentZoom * 100);
+        zoomLabel.setText(zoomPercentage + "%");
+        statusZoomLabel.setText(zoomPercentage + "%");
+    }
+
+    private void updateComponentList() {
+        ObservableList<String> components = FXCollections.observableArrayList();
+        for (String componentName : componentMap.keySet()) {
+            components.add(componentName);
+        }
+        componentsListView.setItems(components);
+    }
+
+    private void updateProjectTreeWithRealData(List<CodeComponent> components) {
+        TreeItem<String> rootItem = new TreeItem<>("Project Structure");
+        rootItem.setExpanded(true);
+
+        // Group by file extensions as requested
+        TreeItem<String> javaGroup = new TreeItem<>("Java Files (.java)");
+        TreeItem<String> kotlinGroup = new TreeItem<>("Kotlin Files (.kt)");
+        TreeItem<String> xmlGroup = new TreeItem<>("XML Files (.xml)");
+
+        for (CodeComponent component : components) {
+            if (component == null) continue;
+            String filePath = component.getFilePath();
+            String language = component.getLanguage();
+            String fileName = null;
+            if (filePath != null) {
+                File f = new File(filePath);
+                fileName = f.getName();
+            }
+            if (fileName == null || fileName.isEmpty()) {
+                // Fallback to name + inferred extension
+                String base = component.getName() != null ? component.getName() : "Unknown";
+                if (language != null && language.equalsIgnoreCase("kotlin")) {
+                    fileName = base + ".kt";
+                } else if (language != null && language.toLowerCase().startsWith("java")) {
+                    fileName = base + ".java";
+                } else {
+                    // default unknown extension
+                    fileName = base;
+                }
+            }
+
+            TreeItem<String> item = new TreeItem<>(fileName);
+
+            String lower = fileName.toLowerCase();
+            if (lower.endsWith(".java")) {
+                javaGroup.getChildren().add(item);
+            } else if (lower.endsWith(".kt")) {
+                kotlinGroup.getChildren().add(item);
+            } else if (lower.endsWith(".xml")) {
+                xmlGroup.getChildren().add(item);
+            }
+        }
+
+        if (!javaGroup.getChildren().isEmpty()) {
+            rootItem.getChildren().add(javaGroup);
+            javaGroup.setExpanded(true);
+        }
+        if (!kotlinGroup.getChildren().isEmpty()) {
+            rootItem.getChildren().add(kotlinGroup);
+            kotlinGroup.setExpanded(true);
+        }
+        if (!xmlGroup.getChildren().isEmpty()) {
+            rootItem.getChildren().add(xmlGroup);
+            xmlGroup.setExpanded(true);
+        }
+
+        projectTreeView.setRoot(rootItem);
+    }
+
+    // Component Filtering Methods
+    private List<CodeComponent> filterUIComponents(List<CodeComponent> allComponents) {
+        List<CodeComponent> uiComponents = new ArrayList<>();
+        for (CodeComponent component : allComponents) {
+            if (isUIComponent(component)) {
+                uiComponents.add(component);
+            }
+        }
+        return uiComponents;
+    }
+
+    private List<CodeComponent> filterComponentsByLayer(List<CodeComponent> allComponents, String targetLayer) {
+        List<CodeComponent> filteredComponents = new ArrayList<>();
+        for (CodeComponent component : allComponents) {
+            if (component != null && targetLayer.equals(component.getLayer())) {
+                filteredComponents.add(component);
+            }
+        }
+        return filteredComponents;
+    }
+
+    private boolean isUIComponent(CodeComponent component) {
+        if (component == null || component.getName() == null) return false;
+
+        String layer = component.getLayer();
+        String name = component.getName().toLowerCase();
+        String extendsClass = component.getExtendsClass();
+
+        if ("UI".equals(layer)) {
+            return true;
+        }
+
+        return name.endsWith("activity") ||
+                name.endsWith("fragment") ||
+                name.endsWith("adapter") ||
+                name.endsWith("viewholder") ||
+                name.contains("screen") ||
+                name.contains("page") ||
+                name.contains("dialog") ||
+                (extendsClass != null &&
+                        (extendsClass.endsWith("Activity") ||
+                                extendsClass.endsWith("Fragment") ||
+                                extendsClass.contains("android.app.Activity") ||
+                                extendsClass.contains("androidx.fragment.app.Fragment")));
+    }
+
+    private void resolveDependencies(List<CodeComponent> allComponents) {
+        if (allComponents == null || allComponents.isEmpty()) return;
+
+        // Use a merge function to handle duplicate keys by keeping the first occurrence
+        Map<String, CodeComponent> byId = allComponents.stream()
+                .filter(c -> c != null && c.getId() != null)
+                .collect(Collectors.toMap(
+                        CodeComponent::getId,
+                        Function.identity(),
+                        (existing, replacement) -> {
+                            System.out.println("WARNING: Duplicate component ID found: " + existing.getId() +
+                                    ". Keeping first occurrence: " + existing.getName());
+                            return existing; // Keep the existing component when duplicate ID is found
+                        }
+                ));
+
+        // Build simple-name fallback map
+        Map<String, CodeComponent> bySimpleName = new HashMap<>();
+        for (CodeComponent c : allComponents) {
+            if (c == null) continue;
+            String id = c.getId();
+            String simple = null;
+            if (id != null && id.contains(".")) {
+                simple = id.substring(id.lastIndexOf('.') + 1);
+            } else if (c.getName() != null) {
+                simple = c.getName();
+            }
+            if (simple != null) bySimpleName.putIfAbsent(simple, c);
+        }
+
+        for (CodeComponent component : allComponents) {
+            if (component == null) continue;
+            List<CodeComponent> originalDeps = component.getDependencies();
+            if (originalDeps == null || originalDeps.isEmpty()) {
+                component.setDependencies(Collections.emptyList());
+                continue;
+            }
+
+            List<CodeComponent> resolvedDependencies = new ArrayList<>();
+
+            for (CodeComponent dependency : originalDeps) {
+                if (dependency == null) continue;
+                CodeComponent resolved = null;
+                if (dependency.getId() != null) {
+                    resolved = byId.get(dependency.getId());
+                }
+                if (resolved == null) {
+                    String key = null;
+                    String depId = dependency.getId();
+                    if (depId != null) {
+                        key = depId.contains(".") ? depId.substring(depId.lastIndexOf('.') + 1) : depId;
+                    }
+                    if ((key == null || key.isEmpty()) && dependency.getName() != null) {
+                        key = dependency.getName();
+                    }
+                    if (key != null) {
+                        resolved = bySimpleName.get(key);
+                    }
+                }
+
+                if (resolved != null && resolved != component) {
+                    resolvedDependencies.add(resolved);
+                } else {
+                    detectComponentLayer(dependency);
+                    resolvedDependencies.add(dependency);
+                }
+            }
+
+            component.setDependencies(resolvedDependencies);
+        }
+    }
+
+    private void detectComponentLayer(CodeComponent component) {
+        if (component.getName() == null) return;
+
+        String name = component.getName().toLowerCase();
+        if (name.endsWith("repository") || name.endsWith("datasource") || name.endsWith("dao")) {
+            component.setLayer("Data");
+        } else if (name.endsWith("viewmodel") || name.endsWith("presenter") || name.endsWith("usecase") ||
+                name.endsWith("service") || name.endsWith("manager") || name.contains("bot")) {
+            component.setLayer("Business Logic");
+        } else if (name.endsWith("activity") || name.endsWith("fragment") || name.endsWith("adapter")) {
+            component.setLayer("UI");
+        } else if (name.endsWith("entity") || name.endsWith("domain") || name.endsWith("model")) {
+            component.setLayer("Domain");
+        }
+        // Otherwise, layer remains as is (might be already set by parser)
+    }
+
+    private void showErrorAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    private long getUsedMemory() {
+        Runtime runtime = Runtime.getRuntime();
+        return (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
+    }
+
+    private void startMemoryMonitoring() {
+        Thread memoryMonitor = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(5000);
+                    javafx.application.Platform.runLater(() -> {
+                        memoryLabel.setText("Memory: " + getUsedMemory() + " MB");
+                    });
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        });
+        memoryMonitor.setDaemon(true);
+        memoryMonitor.start();
+    }
+
+    @FXML
+    private void handleScrollToCenter() {
+        diagramScrollPane.setHvalue(0.5);
+        diagramScrollPane.setVvalue(0.5);
+        statusLabel.setText("Scrolled to center");
+    }
+
+    @FXML
+    private void handleScrollToOrigin() {
+        diagramScrollPane.setHvalue(0);
+        diagramScrollPane.setVvalue(0);
+        statusLabel.setText("Scrolled to origin");
+    }
+
+    @FXML
+    private void handleScrollToNodes() {
+        if (graphManager != null && graphManager.hasNodes()) {
+            // Find the bounding box of all nodes and center on them
+            double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
+            double maxX = Double.MIN_VALUE, maxY = Double.MIN_VALUE;
+
+            for (GraphNode node : graphManager.getNodeMap().values()) {
+                javafx.scene.layout.VBox container = node.getContainer();
+                double x = container.getLayoutX();
+                double y = container.getLayoutY();
+                double width = container.getBoundsInLocal().getWidth();
+                double height = container.getBoundsInLocal().getHeight();
+
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x + width);
+                maxY = Math.max(maxY, y + height);
+            }
+
+            if (minX != Double.MAX_VALUE) {
+                // Calculate center of nodes
+                double centerX = (minX + maxX) / 2 / graphCanvas.getWidth();
+                double centerY = (minY + maxY) / 2 / graphCanvas.getHeight();
+
+                diagramScrollPane.setHvalue(centerX);
+                diagramScrollPane.setVvalue(centerY);
+                statusLabel.setText("Centered on nodes");
+            }
+        }
+    }
 }

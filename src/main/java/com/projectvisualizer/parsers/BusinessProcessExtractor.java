@@ -1,6 +1,6 @@
 package com.projectvisualizer.parsers;
 
-import com.projectvisualizer.models.*;
+import com.projectvisualizer.model.*;
 import java.util.*;
 
 public class BusinessProcessExtractor {
@@ -19,13 +19,16 @@ public class BusinessProcessExtractor {
         return processes;
     }
 
+    // BusinessProcessExtractor.java - Add null checks
     private Map<String, List<UserFlowComponent>> groupFlowsByBusinessGoal(List<UserFlowComponent> userFlows) {
         Map<String, List<UserFlowComponent>> groups = new HashMap<>();
 
         for (UserFlowComponent flow : userFlows) {
-            if (flow.getBusinessContext() != null) {
+            if (flow != null && flow.getBusinessContext() != null) {
                 String goal = flow.getBusinessContext().getBusinessGoal();
-                groups.computeIfAbsent(goal, k -> new ArrayList<>()).add(flow);
+                if (goal != null) {
+                    groups.computeIfAbsent(goal, k -> new ArrayList<>()).add(flow);
+                }
             }
         }
 

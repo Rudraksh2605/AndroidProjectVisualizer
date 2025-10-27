@@ -1,7 +1,6 @@
 package com.projectvisualizer.parsers;
 
-import com.projectvisualizer.models.CodeComponent;
-import com.projectvisualizer.models.NavigationDestination;
+import com.projectvisualizer.model.*;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
