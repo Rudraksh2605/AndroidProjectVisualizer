@@ -37,6 +37,8 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import javafx.embed.swing.SwingFXUtils;
 import java.awt.image.BufferedImage;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 
 public class MainController implements Initializable {
 
@@ -194,9 +196,9 @@ public class MainController implements Initializable {
             visualizationTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
                 try {
                     if (newTab == plantUMLImageTab) {
-                        renderPlantUml(true);
+                        renderPlantUml(false);
                     } else if (newTab == graphvizImageTab) {
-                        renderGraphviz(true);
+                        renderGraphviz(false);
                     }
                 } catch (Exception e) {
                     statusLabel.setText("Failed to render diagram: " + e.getMessage());
@@ -341,6 +343,23 @@ public class MainController implements Initializable {
         updateComponentList();
         updateProjectTreeWithRealData(result.getComponents());
 
+        // Build and display PlantUML & Graphviz representations for the analyzed project
+        try {
+            if (plantUMLTextArea != null) {
+                String puml = buildPlantUmlFromComponents(result.getComponents());
+                plantUMLTextArea.setText(puml);
+                // Pre-render to image view so the Image tab shows immediately when selected
+                renderPlantUml(false);
+            }
+            if (graphvizTextArea != null) {
+                String dot = buildGraphvizDotFromComponents(result.getComponents());
+                graphvizTextArea.setText(dot);
+                renderGraphviz(false);
+            }
+        } catch (Exception e) {
+            statusLabel.setText("Failed to generate diagrams: " + e.getMessage());
+        }
+
         handleResetZoom();
         diagramScrollPane.setVvalue(0);
         diagramScrollPane.setHvalue(0);
@@ -456,7 +475,12 @@ public class MainController implements Initializable {
 
     @FXML
     private void handleCopyPlantUML() {
-        statusLabel.setText("PlantUML code copied to clipboard");
+        if (plantUMLTextArea != null) {
+            ClipboardContent content = new ClipboardContent();
+            content.putString(plantUMLTextArea.getText() == null ? "" : plantUMLTextArea.getText());
+            Clipboard.getSystemClipboard().setContent(content);
+            statusLabel.setText("PlantUML code copied to clipboard");
+        }
     }
 
     // Renders PlantUML source from plantUMLTextArea into plantUMLImageView and optionally onto canvas
@@ -515,7 +539,12 @@ public class MainController implements Initializable {
 
     @FXML
     private void handleCopyGraphviz() {
-        statusLabel.setText("Graphviz code copied to clipboard");
+        if (graphvizTextArea != null) {
+            ClipboardContent content = new ClipboardContent();
+            content.putString(graphvizTextArea.getText() == null ? "" : graphvizTextArea.getText());
+            Clipboard.getSystemClipboard().setContent(content);
+            statusLabel.setText("Graphviz code copied to clipboard");
+        }
     }
 
     @FXML
@@ -1042,4 +1071,160 @@ public class MainController implements Initializable {
             }
         }
     }
+    // Build a PlantUML source from analyzed components and their dependencies
+    private String buildPlantUmlFromComponents(List<CodeComponent> components) {
+        if (components == null || components.isEmpty()) {
+            return "@startuml\n' No components found\n@enduml";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("@startuml\n");
+        sb.append("skinparam backgroundColor #ffffff\n");
+        sb.append("skinparam class {\n  BackgroundColor<<UI>> #e0f2fe\n  BackgroundColor<<BusinessLogic>> #e0ffe0\n  BackgroundColor<<Data>> #fff4e5\n  BackgroundColor<<Domain>> #f3e8ff\n}\n");
+
+        // Create class declarations
+        Map<String, String> idToAlias = new HashMap<>();
+        for (CodeComponent c : components) {
+            if (c == null) continue;
+            String id = Optional.ofNullable(c.getId()).orElse(Optional.ofNullable(c.getName()).orElse(UUID.randomUUID().toString()));
+            String alias = sanitizeIdForDiagram(id);
+            idToAlias.put(id, alias);
+
+            String name = Optional.ofNullable(c.getName()).orElse(id);
+            String type = Optional.ofNullable(c.getType()).orElse("");
+            String layer = Optional.ofNullable(c.getLayer()).orElse("");
+            String stereo = layerStereo(layer);
+
+            sb.append("class \"").append(name).append("\" as ").append(alias);
+            if (!stereo.isEmpty()) {
+                sb.append(" <<").append(stereo).append(">>");
+            }
+            if (type != null && !type.isEmpty()) {
+                sb.append(" : ").append(type);
+            }
+            sb.append("\n");
+        }
+
+        // Dependencies
+        for (CodeComponent c : components) {
+            if (c == null) continue;
+            String fromId = Optional.ofNullable(c.getId()).orElse(c.getName());
+            if (fromId == null) continue;
+            String fromAlias = idToAlias.get(fromId);
+            if (fromAlias == null) fromAlias = sanitizeIdForDiagram(fromId);
+
+            List<CodeComponent> deps = c.getDependencies();
+            if (deps == null) continue;
+            for (CodeComponent d : deps) {
+                if (d == null) continue;
+                String toId = Optional.ofNullable(d.getId()).orElse(d.getName());
+                if (toId == null) continue;
+                String toAlias = idToAlias.getOrDefault(toId, sanitizeIdForDiagram(toId));
+                if (fromAlias.equals(toAlias)) continue;
+                sb.append(fromAlias).append(" --> ").append(toAlias).append("\n");
+            }
+        }
+
+        sb.append("@enduml\n");
+        return sb.toString();
+    }
+
+    // Build a Graphviz DOT source from analyzed components and their dependencies
+    private String buildGraphvizDotFromComponents(List<CodeComponent> components) {
+        if (components == null || components.isEmpty()) {
+            return "digraph G {\n  // No components found\n}";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("digraph G {\n");
+        sb.append("  rankdir=LR;\n");
+        sb.append("  graph [bgcolor=white];\n");
+        sb.append("  node [shape=box, style=filled, fontname=Helvetica];\n");
+
+        // Group by layer into subgraphs
+        Map<String, List<CodeComponent>> byLayer = new HashMap<>();
+        for (CodeComponent c : components) {
+            if (c == null) continue;
+            String layer = Optional.ofNullable(c.getLayer()).orElse("Other");
+            byLayer.computeIfAbsent(layer, k -> new ArrayList<>()).add(c);
+        }
+
+        Map<String, String> idToNode = new HashMap<>();
+        for (Map.Entry<String, List<CodeComponent>> e : byLayer.entrySet()) {
+            String layer = e.getKey();
+            List<CodeComponent> list = e.getValue();
+            String clusterName = sanitizeIdForDiagram("cluster_" + layer);
+            sb.append("  subgraph ").append(clusterName).append(" {\n");
+            sb.append("    label=\"").append(layer).append("\";\n");
+            sb.append("    color=\"").append(layerStroke(layer)).append("\";\n");
+            for (CodeComponent c : list) {
+                String id = Optional.ofNullable(c.getId()).orElse(Optional.ofNullable(c.getName()).orElse(UUID.randomUUID().toString()));
+                String node = sanitizeIdForDiagram(id);
+                idToNode.put(id, node);
+                String label = Optional.ofNullable(c.getName()).orElse(id);
+                String fill = layerFill(layer);
+                sb.append("    ").append(node).append(" [label=\"").append(label.replace("\"", "\\\"")).append("\" fillcolor=\"")
+                        .append(fill).append("\"];\n");
+            }
+            sb.append("  }\n");
+        }
+
+        // Edges
+        for (CodeComponent c : components) {
+            if (c == null) continue;
+            String fromId = Optional.ofNullable(c.getId()).orElse(c.getName());
+            if (fromId == null) continue;
+            String from = idToNode.getOrDefault(fromId, sanitizeIdForDiagram(fromId));
+            List<CodeComponent> deps = c.getDependencies();
+            if (deps == null) continue;
+            for (CodeComponent d : deps) {
+                if (d == null) continue;
+                String toId = Optional.ofNullable(d.getId()).orElse(d.getName());
+                if (toId == null) continue;
+                String to = idToNode.getOrDefault(toId, sanitizeIdForDiagram(toId));
+                if (from.equals(to)) continue;
+                sb.append("  ").append(from).append(" -> ").append(to).append(";\n");
+            }
+        }
+
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    private String sanitizeIdForDiagram(String raw) {
+        if (raw == null || raw.isEmpty()) return "N" + UUID.randomUUID().toString().replace('-', '_');
+        return raw.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    private String layerStereo(String layer) {
+        if (layer == null) return "";
+        switch (layer.trim()) {
+            case "UI": return "UI";
+            case "Data": return "Data";
+            case "Business Logic": return "BusinessLogic";
+            case "Domain": return "Domain";
+            default: return "";
+        }
+    }
+
+    private String layerFill(String layer) {
+        if (layer == null) return "#f2f2f2";
+        switch (layer.trim()) {
+            case "UI": return "#e0f2fe";           // light blue
+            case "Data": return "#fff4e5";         // light orange
+            case "Business Logic": return "#eaffea"; // light green
+            case "Domain": return "#f3e8ff";       // light purple
+            default: return "#f2f2f2";               // light gray
+        }
+    }
+
+    private String layerStroke(String layer) {
+        if (layer == null) return "#cccccc";
+        switch (layer.trim()) {
+            case "UI": return "#93c5fd";           // blue border
+            case "Data": return "#fdba74";         // orange border
+            case "Business Logic": return "#86efac"; // green border
+            case "Domain": return "#d8b4fe";       // purple border
+            default: return "#cccccc";
+        }
+    }
+
 }
