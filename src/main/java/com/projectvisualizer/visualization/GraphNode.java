@@ -20,6 +20,8 @@ import javafx.scene.text.Text;
 import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class GraphNode {
     private CodeComponent component;
@@ -30,7 +32,7 @@ public class GraphNode {
     private List<Line> connectionLines;
     private boolean expanded = false;
     private Pane canvas;
-
+    private String currentViewMode = "ALL";
     private ExpansionMode expansionMode = ExpansionMode.CLASS_DEPENDENCIES;
 
 
@@ -212,7 +214,10 @@ public class GraphNode {
                 break;
         }
 
-        return childComponents;
+        // Filter by current view mode
+        return childComponents.stream()
+                .filter(component -> shouldShowInViewMode(component))
+                .collect(Collectors.toList());
     }
 
     private List<CodeComponent> getUIComponents() {
@@ -296,6 +301,15 @@ public class GraphNode {
         }
 
         return uiComponents;
+    }
+
+    private boolean shouldShowInViewMode(CodeComponent component) {
+        if ("ALL".equals(currentViewMode)) return true;
+
+        // Add your view mode filtering logic here
+        // Similar to the shouldShowComponent method in GraphManager
+        String category = detectComponentCategory(component); // You'll need this method
+        return currentViewMode.equals(category);
     }
 
     private boolean isUIResource(String resource) {
@@ -1452,9 +1466,6 @@ public class GraphNode {
         return formatTargetName(name);
     }
 
-    /**
-     * Check if a target name is valid and meaningful
-     */
     private boolean isValidTargetName(String name) {
         if (name == null || name.isEmpty() || name.equals("TargetScreen")) {
             return false;
@@ -1497,4 +1508,93 @@ public class GraphNode {
 
         return navType;
     }
+
+    public void setVisible(boolean visible) {
+        nodeContainer.setVisible(visible);
+        nodeContainer.setManaged(visible);
+    }
+
+    public boolean isVisible() {
+        return nodeContainer.isVisible();
+    }
+
+    public void setViewMode(String viewMode) {
+        this.currentViewMode = viewMode;
+        if (expanded) {
+            refreshExpansion(); // This will recreate children with new filter
+        }
+    }
+
+
+    public void updateChildrenVisibility(Predicate<CodeComponent> visibilityFilter) {
+        for (GraphNode child : children) {
+            CodeComponent component = child.getComponent();
+            boolean shouldBeVisible = visibilityFilter.test(component);
+
+            child.setVisible(shouldBeVisible);
+            child.setConnectionLinesVisible(shouldBeVisible);
+
+            // Recursively update if this child is expanded
+            if (child.isExpanded()) {
+                child.updateChildrenVisibility(visibilityFilter);
+            }
+        }
+    }
+
+    public void setConnectionLinesVisible(boolean visible) {
+        for (Line line : connectionLines) {
+            line.setVisible(visible);
+            line.setManaged(visible);
+        }
+    }
+
+    // Add method to detect component category (similar to GraphManager's method)
+    private String detectComponentCategory(CodeComponent component) {
+        if (component == null || component.getName() == null) {
+            return "UNKNOWN";
+        }
+
+        String name = component.getName().toLowerCase();
+        String type = component.getType() != null ? component.getType().toLowerCase() : "";
+
+        // UI Components
+        if (name.matches(".*(activity|fragment|adapter|viewholder|view|layout|dialog|menu|button|text|image|list|recycler|card).*") ||
+                type.matches(".*(activity|fragment|adapter|view).*")) {
+            return "UI";
+        }
+
+        // Data Model Components
+        if (name.matches(".*(entity|model|pojo|dto|vo|bean|data|table|user|product|item|order).*") ||
+                type.matches(".*(entity|model|data).*")) {
+            return "DATA_MODEL";
+        }
+
+        // Business Logic Components
+        if (name.matches(".*(viewmodel|presenter|usecase|service|manager|handler|repository|datasource|dao).*") ||
+                type.matches(".*(viewmodel|presenter|usecase|service).*")) {
+            return "BUSINESS_LOGIC";
+        }
+
+        // Navigation Components
+        if (name.matches(".*(intent|navigate|navigation|launch|start|goto|action).*") ||
+                type.matches(".*(intent|navigation).*")) {
+            return "NAVIGATION";
+        }
+
+        return "UNKNOWN";
+    }
+
+    public List<GraphNode> getChildren() {
+        return new ArrayList<>(children);
+    }
+
+    // Add the shouldShowInViewMode method that takes both parameters
+    public boolean shouldShowInViewMode(CodeComponent component, String currentViewMode) {
+        if ("ALL".equals(currentViewMode)) return true;
+
+        String category = detectComponentCategory(component);
+        return currentViewMode.equals(category);
+    }
+
+
 }

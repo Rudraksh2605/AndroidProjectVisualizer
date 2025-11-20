@@ -3,10 +3,7 @@ package com.projectvisualizer.visualization;
 import com.projectvisualizer.model.CodeComponent;
 import javafx.scene.layout.Pane;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class GraphManager {
@@ -15,17 +12,20 @@ public class GraphManager {
     private GraphLayoutManager layoutManager;
     private double viewportWidth;
     private double viewportHeight;
-    private double expansionThreshold = 100; // Increased threshold for better scrolling
+    private double expansionThreshold = 100;
     private double minCanvasWidth = 2000;
     private double minCanvasHeight = 2000;
     private Map<String, List<CodeComponent>> categorizedComponents;
     private String currentViewMode = "ALL";
+
+    private Set<CodeComponent> activeComponents;
 
     public GraphManager(Pane canvas) {
         this.canvas = canvas;
         this.nodeMap = new HashMap<>();
         this.layoutManager = new GraphLayoutManager();
         this.categorizedComponents = new HashMap<>();
+        this.activeComponents = new HashSet<>();
 
         categorizedComponents.put("UI", new ArrayList<>());
         categorizedComponents.put("DATA_MODEL", new ArrayList<>());
@@ -276,7 +276,26 @@ public class GraphManager {
 
     public void setViewMode(String viewMode) {
         this.currentViewMode = viewMode;
-        refreshGraph();
+        updateNodeVisibility();
+    }
+
+    private void updateNodeVisibility() {
+        for (GraphNode node : nodeMap.values()) {
+            CodeComponent component = node.getComponent();
+            boolean shouldBeVisible = shouldShowComponent(component);
+
+            node.getContainer().setVisible(shouldBeVisible);
+            node.getContainer().setManaged(shouldBeVisible);
+        }
+    }
+
+    private boolean shouldShowComponent(CodeComponent component) {
+        if ("ALL".equals(currentViewMode)) {
+            return true;
+        }
+
+        String category = detectComponentCategory(component);
+        return currentViewMode.equals(category);
     }
 
     private void refreshGraph() {
@@ -301,5 +320,35 @@ public class GraphManager {
         categorizedComponents.forEach((category, list) ->
                 stats.put(category, list.size()));
         return stats;
+    }
+
+    public void setViewModeForExpandedNodes(String viewMode) {
+        this.currentViewMode = viewMode;
+
+        // Update all currently expanded nodes
+        for (GraphNode node : nodeMap.values()) {
+            if (node.isExpanded()) {
+                updateExpandedNodeChildren(node, viewMode);
+            }
+        }
+    }
+
+    private void updateExpandedNodeChildren(GraphNode parentNode, String viewMode) {
+        if (!parentNode.isExpanded()) return;
+
+        // Get children through a new method we'll add to GraphNode
+        List<GraphNode> children = parentNode.getChildren();
+
+        for (GraphNode child : children) {
+            // Use the shouldShowInViewMode method from GraphNode
+            boolean shouldBeVisible = child.shouldShowInViewMode(child.getComponent(), viewMode);
+
+            child.setVisible(shouldBeVisible);
+
+            // Recursively update if this child is also expanded
+            if (child.isExpanded()) {
+                updateExpandedNodeChildren(child, viewMode);
+            }
+        }
     }
 }

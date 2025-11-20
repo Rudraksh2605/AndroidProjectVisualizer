@@ -1232,10 +1232,23 @@ public class MainController implements Initializable {
 
     private void setViewMode(String mode) {
         if (graphManager != null) {
-            graphManager.setViewMode(mode);
+            // Use the new method that only affects expanded nodes
+            graphManager.setViewModeForExpandedNodes(mode);
             updateCategoryStats();
-            statusLabel.setText("View mode: " + getViewModeDisplayName(mode));
+            statusLabel.setText("View mode: " + getViewModeDisplayName(mode) + " - applied to expanded nodes");
         }
+    }
+
+    private List<GraphNode> getExpandedNodes() {
+        List<GraphNode> expandedNodes = new ArrayList<>();
+        if (graphManager != null) {
+            for (GraphNode node : graphManager.getNodeMap().values()) {
+                if (node.isExpanded()) {
+                    expandedNodes.add(node);
+                }
+            }
+        }
+        return expandedNodes;
     }
 
     private String getViewModeDisplayName(String mode) {
@@ -1260,18 +1273,12 @@ public class MainController implements Initializable {
     }
 
     private void showComponentRelationships() {
-        // Show dependencies between components
-        if (currentAnalysisResult != null) {
-            graphManager.clearGraph();
-
-            // Add all components and show their relationships
-            for (CodeComponent component : currentAnalysisResult.getComponents()) {
-                graphManager.addComponentToGraph(component);
-            }
-
-            // Highlight dependencies
+        // Show dependencies for currently visible components only
+        if (graphManager != null && graphManager.hasNodes()) {
             highlightDependencies();
-            statusLabel.setText("Showing component relationships and dependencies");
+            statusLabel.setText("Showing relationships for current selection");
+        } else {
+            statusLabel.setText("No components selected to show relationships");
         }
     }
 
