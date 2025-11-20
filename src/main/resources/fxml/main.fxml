@@ -29,6 +29,7 @@
 <?import javafx.scene.shape.Circle?>
 <?import org.controlsfx.control.StatusBar?>
 
+<?import javafx.scene.control.MenuButton?>
 <VBox xmlns="http://javafx.com/javafx/11.0.1"
       xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.projectvisualizer.controllers.MainController"
@@ -179,6 +180,21 @@
 
                 <Separator orientation="VERTICAL"/>
 
+                <VBox>
+                    <Label text="View:" styleClass="toolbar-label" />
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <MenuButton fx:id="viewModeMenuButton" text="All Components">
+                            <items>
+                                <!-- Items will be populated dynamically -->
+                            </items>
+                        </MenuButton>
+                        <Label fx:id="categoryStatsLabel" text="Categories: UI: 0  Data: 0  Business: 0  Navigation: 0"
+                               style="-fx-text-fill: #666; -fx-font-size: 11px;" />
+                    </HBox>
+                </VBox>
+
+                <Separator orientation="VERTICAL"/>
+
                 <!-- Zoom Controls -->
                 <VBox spacing="4">
                     <Label text="Zoom:" styleClass="toolbar-label"/>
@@ -208,6 +224,10 @@
                     </HBox>
                 </VBox>
             </HBox>
+
+
+
+
 
                 <Separator orientation="VERTICAL"/>
 

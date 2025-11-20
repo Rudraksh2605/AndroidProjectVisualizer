@@ -2,8 +2,12 @@ package com.projectvisualizer.visualization;
 
 import com.projectvisualizer.model.CodeComponent;
 import javafx.scene.layout.Pane;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class GraphManager {
     private Pane canvas;
@@ -14,11 +18,20 @@ public class GraphManager {
     private double expansionThreshold = 100; // Increased threshold for better scrolling
     private double minCanvasWidth = 2000;
     private double minCanvasHeight = 2000;
+    private Map<String, List<CodeComponent>> categorizedComponents;
+    private String currentViewMode = "ALL";
 
     public GraphManager(Pane canvas) {
         this.canvas = canvas;
         this.nodeMap = new HashMap<>();
         this.layoutManager = new GraphLayoutManager();
+        this.categorizedComponents = new HashMap<>();
+
+        categorizedComponents.put("UI", new ArrayList<>());
+        categorizedComponents.put("DATA_MODEL", new ArrayList<>());
+        categorizedComponents.put("BUSINESS_LOGIC", new ArrayList<>());
+        categorizedComponents.put("NAVIGATION", new ArrayList<>());
+        categorizedComponents.put("UNKNOWN", new ArrayList<>());
 
         // Set canvas to be large and scrollable
         canvas.setMinSize(minCanvasWidth, minCanvasHeight);
@@ -216,5 +229,77 @@ public class GraphManager {
 
     public void setCanvasUserData() {
         canvas.setUserData(this);
+    }
+
+    public void categorizeComponents(List<CodeComponent> components) {
+        categorizedComponents.forEach((k, v) -> v.clear());
+
+        for (CodeComponent component : components) {
+            String category = detectComponentCategory(component);
+            categorizedComponents.get(category).add(component);
+        }
+    }
+
+    private String detectComponentCategory(CodeComponent component) {
+        if (component == null || component.getName() == null) {
+            return "UNKNOWN";
+        }
+
+        String name = component.getName().toLowerCase();
+
+        // UI Components
+        if (name.matches(".*(activity|fragment|adapter|viewholder|view|layout|dialog|menu|button|text|image|list|recycler|card).*") ||
+                component.getType() != null && component.getType().toLowerCase().matches(".*(activity|fragment|adapter|view).*")) {
+            return "UI";
+        }
+
+        // Data Model Components
+        if (name.matches(".*(entity|model|pojo|dto|vo|bean|data|table|user|product|item|order).*") ||
+                component.getType() != null && component.getType().toLowerCase().matches(".*(entity|model|data).*")) {
+            return "DATA_MODEL";
+        }
+
+        // Business Logic Components
+        if (name.matches(".*(viewmodel|presenter|usecase|service|manager|handler|repository|datasource|dao).*") ||
+                component.getType() != null && component.getType().toLowerCase().matches(".*(viewmodel|presenter|usecase|service).*")) {
+            return "BUSINESS_LOGIC";
+        }
+
+        // Navigation Components
+        if (name.matches(".*(intent|navigate|navigation|launch|start|goto|action).*") ||
+                component.getType() != null && component.getType().toLowerCase().matches(".*(intent|navigation).*")) {
+            return "NAVIGATION";
+        }
+
+        return "UNKNOWN";
+    }
+
+    public void setViewMode(String viewMode) {
+        this.currentViewMode = viewMode;
+        refreshGraph();
+    }
+
+    private void refreshGraph() {
+        clearGraph();
+
+        List<CodeComponent> componentsToShow;
+        if ("ALL".equals(currentViewMode)) {
+            componentsToShow = categorizedComponents.values().stream()
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
+        } else {
+            componentsToShow = categorizedComponents.get(currentViewMode);
+        }
+
+        for (CodeComponent component : componentsToShow) {
+            addComponentToGraph(component);
+        }
+    }
+
+    public Map<String, Integer> getCategoryStats() {
+        Map<String, Integer> stats = new HashMap<>();
+        categorizedComponents.forEach((category, list) ->
+                stats.put(category, list.size()));
+        return stats;
     }
 }

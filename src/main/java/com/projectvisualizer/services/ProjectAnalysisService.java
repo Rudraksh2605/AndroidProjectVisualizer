@@ -178,10 +178,6 @@ public class ProjectAnalysisService {
         return null;
     }
 
-    /**
-     * Resolve dependencies between parsed components. If a dependency cannot be resolved,
-     * keep the stub and try to detect its layer (UI / Data / Business Logic).
-     */
     private void resolveDependencies(List<CodeComponent> allComponents) {
         if (allComponents == null || allComponents.isEmpty()) return;
 
@@ -254,7 +250,6 @@ public class ProjectAnalysisService {
         }
     }
 
-
     private void detectComponentLayer(CodeComponent component) {
         if (component == null || component.getName() == null) return;
 
@@ -268,5 +263,86 @@ public class ProjectAnalysisService {
         } else {
             // leave as unknown; could add more heuristics here
         }
+    }
+
+
+    private Map<String, List<String>> createComponentCategories() {
+        Map<String, List<String>> categories = new HashMap<>();
+
+        // UI Components
+        List<String> uiPatterns = Arrays.asList(
+                "activity", "fragment", "adapter", "viewholder", "view", "layout",
+                "dialog", "menu", "button", "textview", "edittext", "imageview",
+                "recyclerview", "listview", "cardview", "constraintlayout",
+                "linearlayout", "relativelayout", "framelayout", "scrollview",
+                "viewpager", "tablayout", "navigationview", "drawerlayout",
+                "coordinatorlayout", "appbarlayout", "floatingactionbutton",
+                "snackbar", "bottomnavigationview", "toolbar", "actionbar",
+                "progressbar", "seekbar", "switch", "checkbox", "radiobutton",
+                "spinner", "webview", "mapview", "surfaceview", "textureview",
+                "calendarview", "datepicker", "timepicker", "numberpicker",
+                "ratingbar", "searchview", "videoview", "screen", "page",
+                "composable", "widget", "component"
+        );
+        categories.put("UI", uiPatterns);
+
+        // Data Model Components
+        List<String> dataModelPatterns = Arrays.asList(
+                "entity", "model", "pojo", "dto", "vo", "bean", "data",
+                "table", "schema", "column", "field", "property",
+                "user", "product", "item", "order", "cart", "payment",
+                "account", "profile", "settings", "config", "preference"
+        );
+        categories.put("DATA_MODEL", dataModelPatterns);
+
+        // Business Logic Components
+        List<String> businessLogicPatterns = Arrays.asList(
+                "viewmodel", "presenter", "usecase", "interactor", "service",
+                "manager", "handler", "controller", "processor", "executor",
+                "facade", "delegate", "strategy", "command", "mediator",
+                "repository", "datasource", "dao", "provider", "loader",
+                "sync", "fetch", "update", "delete", "create", "validate"
+        );
+        categories.put("BUSINESS_LOGIC", businessLogicPatterns);
+
+        // Navigation/Intent Components
+        List<String> navigationPatterns = Arrays.asList(
+                "intent", "navigate", "navigation", "launch", "open", "start",
+                "goto", "gotofragment", "gotoactivity", "action", "destination",
+                "route", "flow", "transition", "fragmenttransaction",
+                "navcontroller", "pendingintent", "activityresult", "deeplink"
+        );
+        categories.put("NAVIGATION", navigationPatterns);
+
+        return categories;
+    }
+
+    private String detectComponentCategory(CodeComponent component) {
+        if (component == null || component.getName() == null) {
+            return "UNKNOWN";
+        }
+
+        String name = component.getName().toLowerCase();
+        Map<String, List<String>> categories = createComponentCategories();
+
+        for (Map.Entry<String, List<String>> entry : categories.entrySet()) {
+            String category = entry.getKey();
+            List<String> patterns = entry.getValue();
+
+            for (String pattern : patterns) {
+                if (name.contains(pattern) || name.endsWith(pattern) ||
+                        name.startsWith(pattern) || name.equals(pattern)) {
+                    return category;
+                }
+            }
+        }
+
+        // Fallback detection based on existing layer
+        String layer = component.getLayer();
+        if ("UI".equals(layer)) return "UI";
+        if ("Data".equals(layer)) return "DATA_MODEL";
+        if ("Business Logic".equals(layer)) return "BUSINESS_LOGIC";
+
+        return "UNKNOWN";
     }
 }

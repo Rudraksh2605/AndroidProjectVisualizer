@@ -12,7 +12,9 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Line;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.collections.FXCollections;
@@ -79,6 +81,9 @@ public class MainController implements Initializable {
     @FXML private Label progressLabel;
     @FXML private HBox progressContainer;
 
+    @FXML private MenuButton viewModeMenuButton;
+    @FXML private Label categoryStatsLabel;
+
     private GraphManager graphManager;
     private Pane graphCanvas;
     private Map<String, CodeComponent> componentMap;
@@ -93,6 +98,7 @@ public class MainController implements Initializable {
         initializeTreeView();
         initializeEventHandlers();
         initializeStatusBar();
+        initializeViewModeMenu();
         loadSampleData();
     }
 
@@ -305,66 +311,6 @@ public class MainController implements Initializable {
         }
     }
 
-    private void handleAnalysisResult(AnalysisResult result) {
-        statusLabel.setText("Project analysis complete");
-
-        componentMap.clear();
-        for (CodeComponent component : result.getComponents()) {
-            // Add duplicate check here too for the main componentMap
-            if (componentMap.containsKey(component.getId())) {
-                System.err.println("Duplicate in main componentMap: " + component.getId());
-                // Handle duplicate - you might want to append something to make it unique
-                String uniqueId = component.getId() + "_" + System.currentTimeMillis();
-                component.setId(uniqueId);
-            }
-            componentMap.put(component.getId(), component);
-        }
-
-        // RESOLVE DEPENDENCIES AFTER LOADING ALL COMPONENTS
-        try {
-            resolveDependencies(result.getComponents());
-        } catch (Exception e) {
-            System.err.println("Error resolving dependencies: " + e.getMessage());
-            e.printStackTrace();
-            statusLabel.setText("Warning: Some dependencies could not be resolved");
-        }
-
-        graphManager.clearGraph();
-
-        int uiCount = filterUIComponents(result.getComponents()).size();
-        int businessLogicCount = filterComponentsByLayer(result.getComponents(), "Business Logic").size();
-        int dataCount = filterComponentsByLayer(result.getComponents(), "Data").size();
-
-        statusLabel.setText(String.format(
-                "Analysis complete - UI: %d, Business Logic: %d, Data: %d, Total: %d",
-                uiCount, businessLogicCount, dataCount, result.getComponents().size()
-        ));
-
-        updateComponentList();
-        updateProjectTreeWithRealData(result.getComponents());
-
-        // Build and display PlantUML & Graphviz representations for the analyzed project
-        try {
-            if (plantUMLTextArea != null) {
-                String puml = buildPlantUmlFromComponents(result.getComponents());
-                plantUMLTextArea.setText(puml);
-                // Pre-render to image view so the Image tab shows immediately when selected
-                renderPlantUml(false);
-            }
-            if (graphvizTextArea != null) {
-                String dot = buildGraphvizDotFromComponents(result.getComponents());
-                graphvizTextArea.setText(dot);
-                renderGraphviz(false);
-            }
-        } catch (Exception e) {
-            statusLabel.setText("Failed to generate diagrams: " + e.getMessage());
-        }
-
-        handleResetZoom();
-        diagramScrollPane.setVvalue(0);
-        diagramScrollPane.setHvalue(0);
-    }
-
     @FXML
     private void handleExportEnhancedDiagram() {
         FileChooser fileChooser = new FileChooser();
@@ -416,7 +362,7 @@ public class MainController implements Initializable {
         javafx.application.Platform.exit();
     }
 
-    // View Menu Handlers
+
     @FXML
     private void handleZoomIn() {
         currentZoom *= 1.2;
@@ -662,70 +608,105 @@ public class MainController implements Initializable {
         handleExportEnhancedDiagram();
     }
 
-    // Component Selection and Filtering - FIXED TO ALLOW ALL COMPONENTS
     private void handleComponentSelection(TreeItem<String> selectedItem) {
+        if (selectedItem == null || selectedItem.getValue() == null) return;
+
         String itemValue = selectedItem.getValue();
-        if (itemValue == null) return;
 
-        // Try direct map by ID
-        CodeComponent component = componentMap.get(itemValue);
+        // Skip if it's a group header or root
+        if (itemValue.equals("Project Structure") ||
+                itemValue.equals("Java Files (.java)") ||
+                itemValue.equals("Kotlin Files (.kt)") ||
+                itemValue.equals("XML Files (.xml)")) {
+            return;
+        }
 
-        // If the item looks like a filename, try resolving by file path name
+        System.out.println("Selected tree item: " + itemValue);
+        System.out.println("Component map size: " + componentMap.size());
+        System.out.println("Component map keys: " + componentMap.keySet());
+
+        CodeComponent component = null;
+
+        // Strategy 1: Direct ID match
+        component = componentMap.get(itemValue);
+        if (component != null) {
+            System.out.println("Found component by direct ID: " + component.getId());
+        }
+
+        // Strategy 2: Try with filename without extension
         if (component == null) {
-            String filename = itemValue;
-            String baseName = filename;
-            String ext = null;
-            int lastDot = filename.lastIndexOf('.');
-            if (lastDot > 0 && lastDot < filename.length() - 1) {
-                baseName = filename.substring(0, lastDot);
-                ext = filename.substring(lastDot + 1).toLowerCase();
+            String baseName = itemValue;
+            int dotIndex = itemValue.lastIndexOf('.');
+            if (dotIndex > 0) {
+                baseName = itemValue.substring(0, dotIndex);
             }
+            component = componentMap.get(baseName);
+            if (component != null) {
+                System.out.println("Found component by base name: " + baseName);
+            }
+        }
 
-            for (CodeComponent c : componentMap.values()) {
-                String fp = c.getFilePath();
-                if (fp != null) {
-                    File f = new File(fp);
-                    String fn = f.getName();
-                    if (filename.equals(fn)) { // exact filename match with extension
-                        component = c;
-                        break;
-                    }
+        // Strategy 3: Search by component name (case-insensitive)
+        if (component == null) {
+            for (CodeComponent comp : componentMap.values()) {
+                if (comp.getName() != null && comp.getName().equalsIgnoreCase(itemValue)) {
+                    component = comp;
+                    System.out.println("Found component by name match: " + comp.getName());
+                    break;
                 }
             }
+        }
 
-            // Fallback: match by component name (without extension)
-            if (component == null) {
-                for (CodeComponent c : componentMap.values()) {
-                    if (c.getName() != null && c.getName().equals(baseName)) {
-                        // Optionally check language vs extension
-                        if (ext == null || (ext.equals("kt") && "kotlin".equalsIgnoreCase(c.getLanguage()))
-                                || (ext.equals("java") && c.getLanguage() != null && c.getLanguage().toLowerCase().startsWith("java"))
-                                || (ext.equals("xml") && c.getFilePath() != null && c.getFilePath().toLowerCase().endsWith(".xml"))) {
-                            component = c;
-                            break;
-                        }
+        // Strategy 4: Search by filename pattern
+        if (component == null) {
+            for (CodeComponent comp : componentMap.values()) {
+                if (comp.getName() != null) {
+                    // Check if component name matches filename pattern
+                    String compName = comp.getName().toLowerCase();
+                    String fileName = itemValue.toLowerCase();
+
+                    if (fileName.contains(compName) || compName.contains(fileName.replace(".java", "").replace(".kt", ""))) {
+                        component = comp;
+                        System.out.println("Found component by pattern match: " + comp.getName());
+                        break;
                     }
                 }
             }
         }
 
         if (component != null) {
+            System.out.println("Adding component to graph: " + component.getName());
             graphManager.addComponentToGraph(component);
             statusLabel.setText("Added " + component.getName() + " (" + component.getType() + " - " + component.getLayer() + ") to graph");
+
+            // Auto-scroll to the new node after a short delay
             autoScrollToNode(component.getId());
         } else {
+            System.out.println("Component not found for: " + itemValue);
             statusLabel.setText("Component not found: " + itemValue);
+
         }
     }
 
     private void autoScrollToNode(String componentId) {
         javafx.application.Platform.runLater(() -> {
             try {
-                Thread.sleep(100);
+                Thread.sleep(300); // Give time for the node to be rendered
+                diagramScrollPane.layout();
+
+                // Try to find and center on the node
+                GraphNode node = graphManager.getNodeMap().get(componentId);
+                if (node != null) {
+                    javafx.scene.layout.VBox container = node.getContainer();
+                    double centerX = container.getLayoutX() / graphCanvas.getWidth();
+                    double centerY = container.getLayoutY() / graphCanvas.getHeight();
+
+                    diagramScrollPane.setHvalue(Math.max(0, Math.min(1, centerX)));
+                    diagramScrollPane.setVvalue(Math.max(0, Math.min(1, centerY)));
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            diagramScrollPane.layout();
         });
     }
 
@@ -1225,6 +1206,308 @@ public class MainController implements Initializable {
             case "Domain": return "#d8b4fe";       // purple border
             default: return "#cccccc";
         }
+    }
+
+    private void initializeViewModeMenu() {
+        // Create menu items for different view modes
+        MenuItem allItems = new MenuItem("Show All Components");
+        MenuItem uiItems = new MenuItem("Show UI Components Only");
+        MenuItem dataModelItems = new MenuItem("Show Data Models Only");
+        MenuItem businessLogicItems = new MenuItem("Show Business Logic Only");
+        MenuItem navigationItems = new MenuItem("Show Navigation Only");
+        MenuItem relationshipsItems = new MenuItem("Show Component Relationships");
+
+        allItems.setOnAction(e -> setViewMode("ALL"));
+        uiItems.setOnAction(e -> setViewMode("UI"));
+        dataModelItems.setOnAction(e -> setViewMode("DATA_MODEL"));
+        businessLogicItems.setOnAction(e -> setViewMode("BUSINESS_LOGIC"));
+        navigationItems.setOnAction(e -> setViewMode("NAVIGATION"));
+        relationshipsItems.setOnAction(e -> showComponentRelationships());
+
+        viewModeMenuButton.getItems().addAll(
+                allItems, uiItems, dataModelItems, businessLogicItems,
+                navigationItems, new SeparatorMenuItem(), relationshipsItems
+        );
+    }
+
+    private void setViewMode(String mode) {
+        if (graphManager != null) {
+            graphManager.setViewMode(mode);
+            updateCategoryStats();
+            statusLabel.setText("View mode: " + getViewModeDisplayName(mode));
+        }
+    }
+
+    private String getViewModeDisplayName(String mode) {
+        switch (mode) {
+            case "ALL": return "All Components";
+            case "UI": return "UI Components";
+            case "DATA_MODEL": return "Data Models";
+            case "BUSINESS_LOGIC": return "Business Logic";
+            case "NAVIGATION": return "Navigation/Intents";
+            default: return "All Components";
+        }
+    }
+
+    private void updateCategoryStats() {
+        if (graphManager != null) {
+            Map<String, Integer> stats = graphManager.getCategoryStats();
+            StringBuilder statsText = new StringBuilder("Categories: ");
+            stats.forEach((category, count) ->
+                    statsText.append(category).append(": ").append(count).append("  "));
+            categoryStatsLabel.setText(statsText.toString());
+        }
+    }
+
+    private void showComponentRelationships() {
+        // Show dependencies between components
+        if (currentAnalysisResult != null) {
+            graphManager.clearGraph();
+
+            // Add all components and show their relationships
+            for (CodeComponent component : currentAnalysisResult.getComponents()) {
+                graphManager.addComponentToGraph(component);
+            }
+
+            // Highlight dependencies
+            highlightDependencies();
+            statusLabel.setText("Showing component relationships and dependencies");
+        }
+    }
+
+    private void highlightDependencies() {
+        // Enhanced dependency highlighting
+        for (GraphNode node : graphManager.getNodeMap().values()) {
+            CodeComponent component = node.getComponent();
+            if (component.getDependencies() != null) {
+                for (CodeComponent dep : component.getDependencies()) {
+                    highlightDependencyConnection(component, dep);
+                }
+            }
+        }
+    }
+
+    private void highlightDependencyConnection(CodeComponent from, CodeComponent to) {
+        // Implementation for highlighting dependency connections
+        GraphNode fromNode = graphManager.getNodeMap().get(from.getId());
+        GraphNode toNode = graphManager.getNodeMap().get(to.getId());
+
+        if (fromNode != null && toNode != null) {
+            // Create and style dependency connection
+            createDependencyLine(fromNode, toNode);
+        }
+    }
+
+    private void createDependencyLine(GraphNode fromNode, GraphNode toNode) {
+        Line line = new Line();
+
+        line.startXProperty().bind(fromNode.getContainer().layoutXProperty()
+                .add(fromNode.getContainer().widthProperty().divide(2)));
+        line.startYProperty().bind(fromNode.getContainer().layoutYProperty()
+                .add(fromNode.getContainer().heightProperty().divide(2)));
+        line.endXProperty().bind(toNode.getContainer().layoutXProperty()
+                .add(toNode.getContainer().widthProperty().divide(2)));
+        line.endYProperty().bind(toNode.getContainer().layoutYProperty()
+                .add(toNode.getContainer().heightProperty().divide(2)));
+
+        // Style based on dependency type
+        line.setStroke(Color.DARKBLUE);
+        line.setStrokeWidth(1.5);
+        line.getStrokeDashArray().addAll(2.0, 2.0);
+
+        graphCanvas.getChildren().add(line);
+        line.toBack(); // Send to back so nodes appear on top
+    }
+
+    // Enhanced analysis result handling
+    private void handleAnalysisResult(AnalysisResult result) {
+        statusLabel.setText("Project analysis complete");
+
+        componentMap.clear();
+        for (CodeComponent component : result.getComponents()) {
+            if (componentMap.containsKey(component.getId())) {
+                String uniqueId = component.getId() + "_" + System.currentTimeMillis();
+                component.setId(uniqueId);
+            }
+            componentMap.put(component.getId(), component);
+        }
+
+        try {
+            resolveDependencies(result.getComponents());
+        } catch (Exception e) {
+            System.err.println("Error resolving dependencies: " + e.getMessage());
+            statusLabel.setText("Warning: Some dependencies could not be resolved");
+        }
+
+        // Categorize components
+        graphManager.categorizeComponents(result.getComponents());
+        updateCategoryStats();
+
+        // Show initial view
+        setViewMode("ALL");
+
+        updateComponentList();
+        updateProjectTreeWithRealData(result.getComponents());
+
+        // Update diagrams
+        updateDiagrams(result);
+
+        handleResetZoom();
+        diagramScrollPane.setVvalue(0);
+        diagramScrollPane.setHvalue(0);
+    }
+
+    private void updateDiagrams(AnalysisResult result) {
+        try {
+            if (plantUMLTextArea != null) {
+                String puml = buildCategorizedPlantUml(result.getComponents());
+                plantUMLTextArea.setText(puml);
+                renderPlantUml(false);
+            }
+            if (graphvizTextArea != null) {
+                String dot = buildCategorizedGraphviz(result.getComponents());
+                graphvizTextArea.setText(dot);
+                renderGraphviz(false);
+            }
+        } catch (Exception e) {
+            statusLabel.setText("Failed to generate diagrams: " + e.getMessage());
+        }
+    }
+
+    private String buildCategorizedPlantUml(List<CodeComponent> components) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("@startuml\n");
+        sb.append("skinparam backgroundColor #ffffff\n");
+        sb.append("skinparam class {\n");
+        sb.append("  BackgroundColor<<UI>> #e0f2fe\n");
+        sb.append("  BackgroundColor<<DataModel>> #fff4e5\n");
+        sb.append("  BackgroundColor<<BusinessLogic>> #eaffea\n");
+        sb.append("  BackgroundColor<<Navigation>> #ffe0e0\n");
+        sb.append("  BackgroundColor<<Unknown>> #f2f2f2\n");
+        sb.append("}\n\n");
+
+        // Group by category
+        Map<String, List<CodeComponent>> byCategory = components.stream()
+                .collect(Collectors.groupingBy(this::detectComponentCategory));
+
+        for (Map.Entry<String, List<CodeComponent>> entry : byCategory.entrySet()) {
+            String category = entry.getKey();
+            List<CodeComponent> categoryComponents = entry.getValue();
+
+            sb.append("' ").append(category).append(" Components\n");
+            for (CodeComponent component : categoryComponents) {
+                String name = component.getName() != null ? component.getName() : "Unknown";
+                String type = component.getType() != null ? component.getType() : "Component";
+                sb.append("class \"").append(name).append("\" as ").append(sanitizeId(component.getId()))
+                        .append(" <<").append(category).append(">>\n");
+            }
+            sb.append("\n");
+        }
+
+        // Add relationships
+        sb.append("' Dependencies\n");
+        for (CodeComponent component : components) {
+            if (component.getDependencies() != null) {
+                String fromId = sanitizeId(component.getId());
+                for (CodeComponent dep : component.getDependencies()) {
+                    String toId = sanitizeId(dep.getId());
+                    if (!fromId.equals(toId)) {
+                        sb.append(fromId).append(" --> ").append(toId).append("\n");
+                    }
+                }
+            }
+        }
+
+        sb.append("@enduml\n");
+        return sb.toString();
+    }
+
+    private String buildCategorizedGraphviz(List<CodeComponent> components) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("digraph G {\n");
+        sb.append("  rankdir=LR;\n");
+        sb.append("  graph [bgcolor=white];\n");
+        sb.append("  node [shape=box, style=filled, fontname=Helvetica];\n\n");
+
+        Map<String, List<CodeComponent>> byCategory = components.stream()
+                .collect(Collectors.groupingBy(this::detectComponentCategory));
+
+        for (Map.Entry<String, List<CodeComponent>> entry : byCategory.entrySet()) {
+            String category = entry.getKey();
+            List<CodeComponent> categoryComponents = entry.getValue();
+
+            sb.append("  subgraph cluster_").append(category).append(" {\n");
+            sb.append("    label=\"").append(category).append(" Components\";\n");
+            sb.append("    color=\"").append(getCategoryColor(category)).append("\";\n");
+
+            for (CodeComponent component : categoryComponents) {
+                String name = component.getName() != null ? component.getName() : "Unknown";
+                sb.append("    ").append(sanitizeId(component.getId()))
+                        .append(" [label=\"").append(name).append("\" fillcolor=\"")
+                        .append(getCategoryFillColor(category)).append("\"];\n");
+            }
+            sb.append("  }\n\n");
+        }
+
+        // Dependencies
+        sb.append("  // Dependencies\n");
+        for (CodeComponent component : components) {
+            if (component.getDependencies() != null) {
+                String fromId = sanitizeId(component.getId());
+                for (CodeComponent dep : component.getDependencies()) {
+                    String toId = sanitizeId(dep.getId());
+                    if (!fromId.equals(toId)) {
+                        sb.append("  ").append(fromId).append(" -> ").append(toId).append(";\n");
+                    }
+                }
+            }
+        }
+
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    private String detectComponentCategory(CodeComponent component) {
+        if (component == null || component.getName() == null) return "Unknown";
+
+        String name = component.getName().toLowerCase();
+
+        if (name.matches(".*(activity|fragment|adapter|viewholder|view|layout|dialog|menu|button|text|image|list|recycler|card).*")) {
+            return "UI";
+        } else if (name.matches(".*(entity|model|pojo|dto|vo|bean|data|table|user|product|item|order).*")) {
+            return "DataModel";
+        } else if (name.matches(".*(viewmodel|presenter|usecase|service|manager|handler|repository|datasource|dao).*")) {
+            return "BusinessLogic";
+        } else if (name.matches(".*(intent|navigate|navigation|launch|start|goto|action).*")) {
+            return "Navigation";
+        }
+
+        return "Unknown";
+    }
+
+    private String getCategoryColor(String category) {
+        switch (category) {
+            case "UI": return "#93c5fd";
+            case "DataModel": return "#fdba74";
+            case "BusinessLogic": return "#86efac";
+            case "Navigation": return "#f87171";
+            default: return "#cccccc";
+        }
+    }
+
+    private String getCategoryFillColor(String category) {
+        switch (category) {
+            case "UI": return "#e0f2fe";
+            case "DataModel": return "#fff4e5";
+            case "BusinessLogic": return "#eaffea";
+            case "Navigation": return "#ffe0e0";
+            default: return "#f2f2f2";
+        }
+    }
+
+    private String sanitizeId(String id) {
+        if (id == null) return "id_" + UUID.randomUUID().toString().replace('-', '_');
+        return id.replaceAll("[^A-Za-z0-9_]", "_");
     }
 
 }
