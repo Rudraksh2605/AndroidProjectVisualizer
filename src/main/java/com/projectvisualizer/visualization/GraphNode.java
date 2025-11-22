@@ -42,6 +42,8 @@ public class GraphNode {
         this.children = new ArrayList<>();
         this.connectionLines = new ArrayList<>();
         initializeNode();
+        setupContextMenu();
+        setupEventHandlers();
     }
 
     private void initializeNode() {
@@ -126,7 +128,7 @@ public class GraphNode {
         }
     }
 
-    private void expand() {
+    public void expand() {
         if (expanded) return;
 
         expanded = true;
@@ -148,7 +150,7 @@ public class GraphNode {
         animateChildAppearance();
     }
 
-    private void collapse() {
+    public void collapse() {
         if (!expanded) return;
 
         expanded = false;
@@ -183,6 +185,10 @@ public class GraphNode {
         for (CodeComponent childComponent : childComponents) {
             GraphNode childNode = new GraphNode(childComponent, canvas);
 
+            // IMPORTANT: Copy expansion mode and view mode from parent to child
+            childNode.setExpansionMode(this.expansionMode);
+            childNode.setViewMode(this.currentViewMode);
+
             // Position children in a circle around parent
             double angle = Math.toRadians(angleStep * index);
             double childX = nodeContainer.getLayoutX() + radius * Math.cos(angle);
@@ -199,6 +205,13 @@ public class GraphNode {
             canvas.getChildren().add(childNode.getContainer());
             children.add(childNode);
             index++;
+        }
+    }
+
+    public void setExpansionMode(ExpansionMode expansionMode) {
+        this.expansionMode = expansionMode;
+        if (expanded) {
+            refreshExpansion();
         }
     }
 
@@ -774,12 +787,12 @@ public class GraphNode {
         return expansionMode;
     }
 
-    public void setExpansionMode(ExpansionMode expansionMode) {
-        this.expansionMode = expansionMode;
-        if (expanded) {
-            refreshExpansion();
-        }
-    }
+//    public void setExpansionMode(ExpansionMode expansionMode) {
+//        this.expansionMode = expansionMode;
+//        if (expanded) {
+//            refreshExpansion();
+//        }
+//    }
 
     private void setupEventHandlers() {
         // Handle intent node clicks
@@ -1521,7 +1534,7 @@ public class GraphNode {
     public void setViewMode(String viewMode) {
         this.currentViewMode = viewMode;
         if (expanded) {
-            refreshExpansion(); // This will recreate children with new filter
+            refreshExpansion();
         }
     }
 

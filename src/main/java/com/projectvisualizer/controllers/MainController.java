@@ -1517,4 +1517,57 @@ public class MainController implements Initializable {
         return id.replaceAll("[^A-Za-z0-9_]", "_");
     }
 
+    // In MainController.java, add methods to handle recursive expansion:
+
+    @FXML
+    private void handleExpandSelected() {
+        TreeItem<String> selectedItem = projectTreeView.getSelectionModel().getSelectedItem();
+        if (selectedItem != null) {
+            handleComponentSelection(selectedItem);
+
+            // Find the corresponding graph node and expand it recursively
+            String itemValue = selectedItem.getValue();
+            CodeComponent component = findComponentByName(itemValue);
+            if (component != null && graphManager.containsNode(component.getId())) {
+                graphManager.expandNodeWithChildren(component.getId());
+                statusLabel.setText("Expanded " + component.getName() + " with children");
+            }
+        }
+    }
+
+    @FXML
+    private void handleExpandAll() {
+        // Expand all root nodes that are currently visible
+        for (GraphNode node : graphManager.getNodeMap().values()) {
+            if (node.isVisible() && !node.isExpanded()) {
+                node.expand();
+            }
+        }
+        statusLabel.setText("Expanded all visible nodes");
+    }
+
+    @FXML
+    private void handleCollapseAll() {
+        for (GraphNode node : graphManager.getNodeMap().values()) {
+            if (node.isExpanded()) {
+                node.collapse();
+            }
+        }
+        statusLabel.setText("Collapsed all nodes");
+    }
+
+    private CodeComponent findComponentByName(String name) {
+        for (CodeComponent component : componentMap.values()) {
+            if (component.getName() != null && component.getName().equalsIgnoreCase(name)) {
+                return component;
+            }
+            // Also check by filename pattern
+            String fileName = component.getFilePath();
+            if (fileName != null && fileName.contains(name.replace(".java", "").replace(".kt", ""))) {
+                return component;
+            }
+        }
+        return null;
+    }
+
 }

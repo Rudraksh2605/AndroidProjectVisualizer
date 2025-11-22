@@ -351,4 +351,34 @@ public class GraphManager {
             }
         }
     }
+
+    public void expandNodeWithChildren(String componentId) {
+        GraphNode node = nodeMap.get(componentId);
+        if (node != null && !node.isExpanded()) {
+            node.expand(); // Use the expand method instead of toggle
+
+            // Recursively expand children if they meet certain criteria
+            expandChildNodesRecursively(node, 2); // Expand up to 2 levels deep
+        }
+    }
+    private void expandChildNodesRecursively(GraphNode parentNode, int maxDepth) {
+        if (maxDepth <= 0) return;
+
+        for (GraphNode childNode : parentNode.getChildren()) {
+            if (!childNode.isExpanded() && shouldAutoExpand(childNode)) {
+                childNode.expand();
+                expandChildNodesRecursively(childNode, maxDepth - 1);
+            }
+        }
+    }
+
+    private boolean shouldAutoExpand(GraphNode node) {
+        CodeComponent component = node.getComponent();
+        // Auto-expand nodes that have dependencies or are key components
+        return (component.getDependencies() != null && !component.getDependencies().isEmpty()) ||
+                component.getType().equals("Activity") ||
+                component.getType().equals("Fragment") ||
+                component.getType().equals("ViewModel");
+    }
+
 }
