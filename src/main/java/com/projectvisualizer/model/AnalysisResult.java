@@ -9,6 +9,15 @@ public class AnalysisResult {
     private List<UserFlowComponent> userFlows;
     private Map<String, String> activityLayoutMap;
     private String error;
+    private Map<String, List<CodeComponent>> categorizedComponents;
+
+    public Map<String, List<CodeComponent>> getCategorizedComponents() {
+        return categorizedComponents;
+    }
+
+    public void setCategorizedComponents(Map<String, List<CodeComponent>> categorizedComponents) {
+        this.categorizedComponents = categorizedComponents;
+    }
 
     public List<CodeComponent> getComponents() {
         return components;

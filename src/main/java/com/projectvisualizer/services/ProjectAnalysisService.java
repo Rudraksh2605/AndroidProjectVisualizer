@@ -15,6 +15,7 @@ public class ProjectAnalysisService {
     private AndroidManifestParser manifestParser;
     private Map<String, String> activityLayoutMap;
 
+
     public ProjectAnalysisService() {
         this.xmlParser = new XmlParser();
         this.manifestParser = new AndroidManifestParser();
@@ -24,28 +25,21 @@ public class ProjectAnalysisService {
         AnalysisResult result = new AnalysisResult();
 
         try {
-            // 1. Parse AndroidManifest first to get activity mappings
             activityLayoutMap = parseAndroidManifest(projectDir);
-
-            // Initialize parsers with activity layout map
             this.javaParser = new JavaFileParser(activityLayoutMap);
             this.kotlinParser = new KotlinParser(activityLayoutMap);
-
-            // 2. Recursively scan and parse all source files
             List<CodeComponent> allComponents = new ArrayList<>();
             scanAndParseDirectory(projectDir, allComponents);
-
-            // 2.5 Resolve dependencies and detect layers for stub components
             resolveDependencies(allComponents);
-
-            // 3. Extract navigation flows and user flows
             List<NavigationFlow> navigationFlows = extractNavigationFlows(allComponents);
             List<UserFlowComponent> userFlows = extractUserFlows(allComponents, navigationFlows);
-
+            Map<String, List<CodeComponent>> categorizedComponents = categorizeComponents(allComponents);
             result.setComponents(allComponents);
             result.setNavigationFlows(navigationFlows);
             result.setUserFlows(userFlows);
             result.setActivityLayoutMap(activityLayoutMap);
+            result.setCategorizedComponents(categorizedComponents);
+
 
         } catch (Exception e) {
             result.setError(e.getMessage());
@@ -265,84 +259,23 @@ public class ProjectAnalysisService {
         }
     }
 
-
-    private Map<String, List<String>> createComponentCategories() {
-        Map<String, List<String>> categories = new HashMap<>();
-
-        // UI Components
-        List<String> uiPatterns = Arrays.asList(
-                "activity", "fragment", "adapter", "viewholder", "view", "layout",
-                "dialog", "menu", "button", "textview", "edittext", "imageview",
-                "recyclerview", "listview", "cardview", "constraintlayout",
-                "linearlayout", "relativelayout", "framelayout", "scrollview",
-                "viewpager", "tablayout", "navigationview", "drawerlayout",
-                "coordinatorlayout", "appbarlayout", "floatingactionbutton",
-                "snackbar", "bottomnavigationview", "toolbar", "actionbar",
-                "progressbar", "seekbar", "switch", "checkbox", "radiobutton",
-                "spinner", "webview", "mapview", "surfaceview", "textureview",
-                "calendarview", "datepicker", "timepicker", "numberpicker",
-                "ratingbar", "searchview", "videoview", "screen", "page",
-                "composable", "widget", "component"
-        );
-        categories.put("UI", uiPatterns);
-
-        // Data Model Components
-        List<String> dataModelPatterns = Arrays.asList(
-                "entity", "model", "pojo", "dto", "vo", "bean", "data",
-                "table", "schema", "column", "field", "property",
-                "user", "product", "item", "order", "cart", "payment",
-                "account", "profile", "settings", "config", "preference"
-        );
-        categories.put("DATA_MODEL", dataModelPatterns);
-
-        // Business Logic Components
-        List<String> businessLogicPatterns = Arrays.asList(
-                "viewmodel", "presenter", "usecase", "interactor", "service",
-                "manager", "handler", "controller", "processor", "executor",
-                "facade", "delegate", "strategy", "command", "mediator",
-                "repository", "datasource", "dao", "provider", "loader",
-                "sync", "fetch", "update", "delete", "create", "validate"
-        );
-        categories.put("BUSINESS_LOGIC", businessLogicPatterns);
-
-        // Navigation/Intent Components
-        List<String> navigationPatterns = Arrays.asList(
-                "intent", "navigate", "navigation", "launch", "open", "start",
-                "goto", "gotofragment", "gotoactivity", "action", "destination",
-                "route", "flow", "transition", "fragmenttransaction",
-                "navcontroller", "pendingintent", "activityresult", "deeplink"
-        );
-        categories.put("NAVIGATION", navigationPatterns);
-
-        return categories;
-    }
-
     private String detectComponentCategory(CodeComponent component) {
-        if (component == null || component.getName() == null) {
-            return "UNKNOWN";
-        }
-
-        String name = component.getName().toLowerCase();
-        Map<String, List<String>> categories = createComponentCategories();
-
-        for (Map.Entry<String, List<String>> entry : categories.entrySet()) {
-            String category = entry.getKey();
-            List<String> patterns = entry.getValue();
-
-            for (String pattern : patterns) {
-                if (name.contains(pattern) || name.endsWith(pattern) ||
-                        name.startsWith(pattern) || name.equals(pattern)) {
-                    return category;
-                }
-            }
-        }
-
-        // Fallback detection based on existing layer
-        String layer = component.getLayer();
-        if ("UI".equals(layer)) return "UI";
-        if ("Data".equals(layer)) return "DATA_MODEL";
-        if ("Business Logic".equals(layer)) return "BUSINESS_LOGIC";
-
-        return "UNKNOWN";
+        return ComponentCategorizer.detectCategory(component);
     }
+
+    public Map<String, List<CodeComponent>> categorizeComponents(List<CodeComponent> components) {
+        Map<String, List<CodeComponent>> categorized = new HashMap<>();
+
+        for (String category : Arrays.asList("UI", "DATA_MODEL", "BUSINESS_LOGIC", "NAVIGATION", "UNKNOWN")) {
+            categorized.put(category, new ArrayList<>());
+        }
+
+        for (CodeComponent component : components) {
+            String category = detectComponentCategory(component);
+            categorized.get(category).add(component);
+        }
+
+        return categorized;
+    }
+
 }

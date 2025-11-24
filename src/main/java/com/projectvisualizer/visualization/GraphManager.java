@@ -1,6 +1,7 @@
 package com.projectvisualizer.visualization;
 
 import com.projectvisualizer.model.CodeComponent;
+import com.projectvisualizer.services.ComponentCategorizer;
 import javafx.scene.layout.Pane;
 
 import java.util.*;
@@ -241,38 +242,9 @@ public class GraphManager {
     }
 
     private String detectComponentCategory(CodeComponent component) {
-        if (component == null || component.getName() == null) {
-            return "UNKNOWN";
-        }
-
-        String name = component.getName().toLowerCase();
-
-        // UI Components
-        if (name.matches(".*(activity|fragment|adapter|viewholder|view|layout|dialog|menu|button|text|image|list|recycler|card).*") ||
-                component.getType() != null && component.getType().toLowerCase().matches(".*(activity|fragment|adapter|view).*")) {
-            return "UI";
-        }
-
-        // Data Model Components
-        if (name.matches(".*(entity|model|pojo|dto|vo|bean|data|table|user|product|item|order).*") ||
-                component.getType() != null && component.getType().toLowerCase().matches(".*(entity|model|data).*")) {
-            return "DATA_MODEL";
-        }
-
-        // Business Logic Components
-        if (name.matches(".*(viewmodel|presenter|usecase|service|manager|handler|repository|datasource|dao).*") ||
-                component.getType() != null && component.getType().toLowerCase().matches(".*(viewmodel|presenter|usecase|service).*")) {
-            return "BUSINESS_LOGIC";
-        }
-
-        // Navigation Components
-        if (name.matches(".*(intent|navigate|navigation|launch|start|goto|action).*") ||
-                component.getType() != null && component.getType().toLowerCase().matches(".*(intent|navigation).*")) {
-            return "NAVIGATION";
-        }
-
-        return "UNKNOWN";
+        return ComponentCategorizer.detectCategory(component);
     }
+
 
     public void setViewMode(String viewMode) {
         this.currentViewMode = viewMode;
@@ -318,7 +290,7 @@ public class GraphManager {
     public Map<String, Integer> getCategoryStats() {
         Map<String, Integer> stats = new HashMap<>();
         categorizedComponents.forEach((category, list) ->
-                stats.put(category, list.size()));
+                stats.put(ComponentCategorizer.getDisplayName(category), list.size()));
         return stats;
     }
 

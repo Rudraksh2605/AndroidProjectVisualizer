@@ -41,43 +41,29 @@ import javafx.embed.swing.SwingFXUtils;
 import java.awt.image.BufferedImage;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
+import com.projectvisualizer.services.ComponentCategorizer;
 
 public class MainController implements Initializable {
 
-    // FXML Injections from main.fxml
     @FXML private VBox mainContainer;
     @FXML private TreeView<String> projectTreeView;
     @FXML private ScrollPane diagramScrollPane;
-    @FXML private ScrollPane minimapScrollPane;
-    @FXML private Pane legendOverlayPane;
     @FXML private TabPane visualizationTabPane;
     @FXML private ListView<String> componentsListView;
-    @FXML private VBox dependenciesContainer;
-    @FXML private VBox statisticsContainer;
-    @FXML private VBox metricsContainer;
     @FXML private TextArea plantUMLTextArea;
     @FXML private TextArea graphvizTextArea;
 
-    // PlantUML and Graphviz tabs
     @FXML private Tab plantUMLImageTab;
     @FXML private Tab graphvizImageTab;
     @FXML private ImageView plantUMLImageView;
     @FXML private ImageView graphvizImageView;
 
-    // Toolbar controls
-    @FXML private ComboBox<String> featureFilterComboBox;
     @FXML private Label zoomLabel;
-    @FXML private CheckBox showLabelsCheckBox;
-    @FXML private CheckBox showGridCheckBox;
-    @FXML private CheckBox showMinimapCheckBox;
 
-    // Status bar
     @FXML private Label statusLabel;
     @FXML private Label projectInfoLabel;
     @FXML private Label memoryLabel;
     @FXML private Label statusZoomLabel;
-    @FXML private Circle connectionStatusIndicator;
-    @FXML private ProgressIndicator analysisProgressIndicator;
     @FXML private Label progressLabel;
     @FXML private HBox progressContainer;
 
@@ -411,15 +397,6 @@ public class MainController implements Initializable {
     }
 
     @FXML
-    private void handleTreeSettings() {
-        Alert settingsDialog = new Alert(Alert.AlertType.INFORMATION);
-        settingsDialog.setTitle("Tree View Settings");
-        settingsDialog.setHeaderText("Tree View Configuration");
-        settingsDialog.setContentText("Tree view settings will be implemented in future version.");
-        settingsDialog.showAndWait();
-    }
-
-    @FXML
     private void handleCopyPlantUML() {
         if (plantUMLTextArea != null) {
             ClipboardContent content = new ClipboardContent();
@@ -429,7 +406,6 @@ public class MainController implements Initializable {
         }
     }
 
-    // Renders PlantUML source from plantUMLTextArea into plantUMLImageView and optionally onto canvas
     private void renderPlantUml(boolean showOnCanvas) {
         try {
             if (plantUMLTextArea == null || plantUMLImageView == null) return;
@@ -784,110 +760,6 @@ public class MainController implements Initializable {
         projectTreeView.setRoot(rootItem);
     }
 
-    // Component Filtering Methods
-    private List<CodeComponent> filterUIComponents(List<CodeComponent> allComponents) {
-        List<CodeComponent> uiComponents = new ArrayList<>();
-        for (CodeComponent component : allComponents) {
-            if (isUIComponent(component)) {
-                uiComponents.add(component);
-            }
-        }
-        return uiComponents;
-    }
-
-    private List<CodeComponent> filterComponentsByLayer(List<CodeComponent> allComponents, String targetLayer) {
-        List<CodeComponent> filteredComponents = new ArrayList<>();
-        for (CodeComponent component : allComponents) {
-            if (component != null && targetLayer.equals(component.getLayer())) {
-                filteredComponents.add(component);
-            }
-        }
-        return filteredComponents;
-    }
-
-    // Enhanced UI component detection for both Java and Kotlin
-    private boolean isUIComponent(CodeComponent component) {
-        if (component == null || component.getName() == null) return false;
-
-        String layer = component.getLayer();
-        String name = component.getName().toLowerCase();
-        String extendsClass = component.getExtendsClass();
-        String type = component.getType();
-        String packageName = component.getPackageName();
-        String filePath = component.getFilePath();
-
-        // Check by layer first
-        if ("UI".equals(layer)) {
-            return true;
-        }
-
-        // Check by type (works for both Java and Kotlin)
-        if (type != null) {
-            String lowerType = type.toLowerCase();
-            if (lowerType.contains("activity") ||
-                    lowerType.contains("fragment") ||
-                    lowerType.contains("adapter") ||
-                    lowerType.contains("viewholder") ||
-                    lowerType.contains("view") ||
-                    lowerType.contains("layout") ||
-                    lowerType.contains("dialog") ||
-                    lowerType.contains("menu") ||
-                    lowerType.contains("button") ||
-                    lowerType.contains("text") ||
-                    lowerType.contains("image") ||
-                    lowerType.contains("list") ||
-                    lowerType.contains("recycler") ||
-                    lowerType.contains("card")) {
-                return true;
-            }
-        }
-
-        // Check by name patterns (works for both Java and Kotlin)
-        boolean isUIByName = name.endsWith("activity") ||
-                name.endsWith("fragment") ||
-                name.endsWith("adapter") ||
-                name.endsWith("viewholder") ||
-                name.endsWith("view") ||
-                name.endsWith("layout") ||
-                name.contains("screen") ||
-                name.contains("page") ||
-                name.contains("dialog") ||
-                name.contains("button") ||
-                name.contains("text") ||
-                name.contains("image") ||
-                name.contains("list") ||
-                name.contains("recycler") ||
-                name.contains("card");
-
-        // Check extends class (works for both Java and Kotlin)
-        boolean isUIByExtends = extendsClass != null &&
-                (extendsClass.endsWith("Activity") ||
-                        extendsClass.endsWith("Fragment") ||
-                        extendsClass.endsWith("View") ||
-                        extendsClass.endsWith("Adapter") ||
-                        extendsClass.contains("android.app.Activity") ||
-                        extendsClass.contains("androidx.fragment.app.Fragment") ||
-                        extendsClass.contains("android.view.View") ||
-                        extendsClass.contains("android.widget.") ||
-                        extendsClass.contains("androidx.recyclerview.widget.") ||
-                        extendsClass.contains("androidx.appcompat.app.AppCompatActivity") ||
-                        extendsClass.contains("androidx.fragment.app.FragmentActivity"));
-
-        // Check package name for Android UI components
-        boolean isUIByPackage = packageName != null &&
-                (packageName.startsWith("android.") ||
-                        packageName.startsWith("androidx.") ||
-                        packageName.contains(".widget.") ||
-                        packageName.contains(".view.") ||
-                        packageName.contains(".custom."));
-
-        // Check file path for layout files
-        boolean isUIByFile = filePath != null &&
-                (filePath.contains("/layout/") ||
-                        filePath.endsWith(".xml") && filePath.contains("res"));
-
-        return isUIByName || isUIByExtends || isUIByPackage || isUIByFile;
-    }
     private void resolveDependencies(List<CodeComponent> allComponents) {
         if (allComponents == null || allComponents.isEmpty()) return;
 
@@ -1007,207 +879,6 @@ public class MainController implements Initializable {
         memoryMonitor.start();
     }
 
-    @FXML
-    private void handleScrollToCenter() {
-        diagramScrollPane.setHvalue(0.5);
-        diagramScrollPane.setVvalue(0.5);
-        statusLabel.setText("Scrolled to center");
-    }
-
-    @FXML
-    private void handleScrollToOrigin() {
-        diagramScrollPane.setHvalue(0);
-        diagramScrollPane.setVvalue(0);
-        statusLabel.setText("Scrolled to origin");
-    }
-
-    @FXML
-    private void handleScrollToNodes() {
-        if (graphManager != null && graphManager.hasNodes()) {
-            // Find the bounding box of all nodes and center on them
-            double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
-            double maxX = Double.MIN_VALUE, maxY = Double.MIN_VALUE;
-
-            for (GraphNode node : graphManager.getNodeMap().values()) {
-                javafx.scene.layout.VBox container = node.getContainer();
-                double x = container.getLayoutX();
-                double y = container.getLayoutY();
-                double width = container.getBoundsInLocal().getWidth();
-                double height = container.getBoundsInLocal().getHeight();
-
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x + width);
-                maxY = Math.max(maxY, y + height);
-            }
-
-            if (minX != Double.MAX_VALUE) {
-                // Calculate center of nodes
-                double centerX = (minX + maxX) / 2 / graphCanvas.getWidth();
-                double centerY = (minY + maxY) / 2 / graphCanvas.getHeight();
-
-                diagramScrollPane.setHvalue(centerX);
-                diagramScrollPane.setVvalue(centerY);
-                statusLabel.setText("Centered on nodes");
-            }
-        }
-    }
-    // Build a PlantUML source from analyzed components and their dependencies
-    private String buildPlantUmlFromComponents(List<CodeComponent> components) {
-        if (components == null || components.isEmpty()) {
-            return "@startuml\n' No components found\n@enduml";
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("@startuml\n");
-        sb.append("skinparam backgroundColor #ffffff\n");
-        sb.append("skinparam class {\n  BackgroundColor<<UI>> #e0f2fe\n  BackgroundColor<<BusinessLogic>> #e0ffe0\n  BackgroundColor<<Data>> #fff4e5\n  BackgroundColor<<Domain>> #f3e8ff\n}\n");
-
-        // Create class declarations
-        Map<String, String> idToAlias = new HashMap<>();
-        for (CodeComponent c : components) {
-            if (c == null) continue;
-            String id = Optional.ofNullable(c.getId()).orElse(Optional.ofNullable(c.getName()).orElse(UUID.randomUUID().toString()));
-            String alias = sanitizeIdForDiagram(id);
-            idToAlias.put(id, alias);
-
-            String name = Optional.ofNullable(c.getName()).orElse(id);
-            String type = Optional.ofNullable(c.getType()).orElse("");
-            String layer = Optional.ofNullable(c.getLayer()).orElse("");
-            String stereo = layerStereo(layer);
-
-            sb.append("class \"").append(name).append("\" as ").append(alias);
-            if (!stereo.isEmpty()) {
-                sb.append(" <<").append(stereo).append(">>");
-            }
-            if (type != null && !type.isEmpty()) {
-                sb.append(" : ").append(type);
-            }
-            sb.append("\n");
-        }
-
-        // Dependencies
-        for (CodeComponent c : components) {
-            if (c == null) continue;
-            String fromId = Optional.ofNullable(c.getId()).orElse(c.getName());
-            if (fromId == null) continue;
-            String fromAlias = idToAlias.get(fromId);
-            if (fromAlias == null) fromAlias = sanitizeIdForDiagram(fromId);
-
-            List<CodeComponent> deps = c.getDependencies();
-            if (deps == null) continue;
-            for (CodeComponent d : deps) {
-                if (d == null) continue;
-                String toId = Optional.ofNullable(d.getId()).orElse(d.getName());
-                if (toId == null) continue;
-                String toAlias = idToAlias.getOrDefault(toId, sanitizeIdForDiagram(toId));
-                if (fromAlias.equals(toAlias)) continue;
-                sb.append(fromAlias).append(" --> ").append(toAlias).append("\n");
-            }
-        }
-
-        sb.append("@enduml\n");
-        return sb.toString();
-    }
-
-    // Build a Graphviz DOT source from analyzed components and their dependencies
-    private String buildGraphvizDotFromComponents(List<CodeComponent> components) {
-        if (components == null || components.isEmpty()) {
-            return "digraph G {\n  // No components found\n}";
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("digraph G {\n");
-        sb.append("  rankdir=LR;\n");
-        sb.append("  graph [bgcolor=white];\n");
-        sb.append("  node [shape=box, style=filled, fontname=Helvetica];\n");
-
-        // Group by layer into subgraphs
-        Map<String, List<CodeComponent>> byLayer = new HashMap<>();
-        for (CodeComponent c : components) {
-            if (c == null) continue;
-            String layer = Optional.ofNullable(c.getLayer()).orElse("Other");
-            byLayer.computeIfAbsent(layer, k -> new ArrayList<>()).add(c);
-        }
-
-        Map<String, String> idToNode = new HashMap<>();
-        for (Map.Entry<String, List<CodeComponent>> e : byLayer.entrySet()) {
-            String layer = e.getKey();
-            List<CodeComponent> list = e.getValue();
-            String clusterName = sanitizeIdForDiagram("cluster_" + layer);
-            sb.append("  subgraph ").append(clusterName).append(" {\n");
-            sb.append("    label=\"").append(layer).append("\";\n");
-            sb.append("    color=\"").append(layerStroke(layer)).append("\";\n");
-            for (CodeComponent c : list) {
-                String id = Optional.ofNullable(c.getId()).orElse(Optional.ofNullable(c.getName()).orElse(UUID.randomUUID().toString()));
-                String node = sanitizeIdForDiagram(id);
-                idToNode.put(id, node);
-                String label = Optional.ofNullable(c.getName()).orElse(id);
-                String fill = layerFill(layer);
-                sb.append("    ").append(node).append(" [label=\"").append(label.replace("\"", "\\\"")).append("\" fillcolor=\"")
-                        .append(fill).append("\"];\n");
-            }
-            sb.append("  }\n");
-        }
-
-        // Edges
-        for (CodeComponent c : components) {
-            if (c == null) continue;
-            String fromId = Optional.ofNullable(c.getId()).orElse(c.getName());
-            if (fromId == null) continue;
-            String from = idToNode.getOrDefault(fromId, sanitizeIdForDiagram(fromId));
-            List<CodeComponent> deps = c.getDependencies();
-            if (deps == null) continue;
-            for (CodeComponent d : deps) {
-                if (d == null) continue;
-                String toId = Optional.ofNullable(d.getId()).orElse(d.getName());
-                if (toId == null) continue;
-                String to = idToNode.getOrDefault(toId, sanitizeIdForDiagram(toId));
-                if (from.equals(to)) continue;
-                sb.append("  ").append(from).append(" -> ").append(to).append(";\n");
-            }
-        }
-
-        sb.append("}\n");
-        return sb.toString();
-    }
-
-    private String sanitizeIdForDiagram(String raw) {
-        if (raw == null || raw.isEmpty()) return "N" + UUID.randomUUID().toString().replace('-', '_');
-        return raw.replaceAll("[^A-Za-z0-9_]", "_");
-    }
-
-    private String layerStereo(String layer) {
-        if (layer == null) return "";
-        switch (layer.trim()) {
-            case "UI": return "UI";
-            case "Data": return "Data";
-            case "Business Logic": return "BusinessLogic";
-            case "Domain": return "Domain";
-            default: return "";
-        }
-    }
-
-    private String layerFill(String layer) {
-        if (layer == null) return "#f2f2f2";
-        switch (layer.trim()) {
-            case "UI": return "#e0f2fe";           // light blue
-            case "Data": return "#fff4e5";         // light orange
-            case "Business Logic": return "#eaffea"; // light green
-            case "Domain": return "#f3e8ff";       // light purple
-            default: return "#f2f2f2";               // light gray
-        }
-    }
-
-    private String layerStroke(String layer) {
-        if (layer == null) return "#cccccc";
-        switch (layer.trim()) {
-            case "UI": return "#93c5fd";           // blue border
-            case "Data": return "#fdba74";         // orange border
-            case "Business Logic": return "#86efac"; // green border
-            case "Domain": return "#d8b4fe";       // purple border
-            default: return "#cccccc";
-        }
-    }
-
     private void initializeViewModeMenu() {
         // Create menu items for different view modes
         MenuItem allItems = new MenuItem("Show All Components");
@@ -1237,18 +908,6 @@ public class MainController implements Initializable {
             updateCategoryStats();
             statusLabel.setText("View mode: " + getViewModeDisplayName(mode) + " - applied to expanded nodes");
         }
-    }
-
-    private List<GraphNode> getExpandedNodes() {
-        List<GraphNode> expandedNodes = new ArrayList<>();
-        if (graphManager != null) {
-            for (GraphNode node : graphManager.getNodeMap().values()) {
-                if (node.isExpanded()) {
-                    expandedNodes.add(node);
-                }
-            }
-        }
-        return expandedNodes;
     }
 
     private String getViewModeDisplayName(String mode) {
@@ -1326,7 +985,6 @@ public class MainController implements Initializable {
         line.toBack(); // Send to back so nodes appear on top
     }
 
-    // Enhanced analysis result handling
     private void handleAnalysisResult(AnalysisResult result) {
         statusLabel.setText("Project analysis complete");
 
@@ -1393,9 +1051,9 @@ public class MainController implements Initializable {
         sb.append("  BackgroundColor<<Unknown>> #f2f2f2\n");
         sb.append("}\n\n");
 
-        // Group by category
+        // Group by category using enhanced detection
         Map<String, List<CodeComponent>> byCategory = components.stream()
-                .collect(Collectors.groupingBy(this::detectComponentCategory));
+                .collect(Collectors.groupingBy(this::detectComponentCategoryForDiagrams));
 
         for (Map.Entry<String, List<CodeComponent>> entry : byCategory.entrySet()) {
             String category = entry.getKey();
@@ -1437,7 +1095,7 @@ public class MainController implements Initializable {
         sb.append("  node [shape=box, style=filled, fontname=Helvetica];\n\n");
 
         Map<String, List<CodeComponent>> byCategory = components.stream()
-                .collect(Collectors.groupingBy(this::detectComponentCategory));
+                .collect(Collectors.groupingBy(this::detectComponentCategoryForDiagrams));
 
         for (Map.Entry<String, List<CodeComponent>> entry : byCategory.entrySet()) {
             String category = entry.getKey();
@@ -1474,25 +1132,8 @@ public class MainController implements Initializable {
         return sb.toString();
     }
 
-    private String detectComponentCategory(CodeComponent component) {
-        if (component == null || component.getName() == null) return "Unknown";
-
-        String name = component.getName().toLowerCase();
-
-        if (name.matches(".*(activity|fragment|adapter|viewholder|view|layout|dialog|menu|button|text|image|list|recycler|card).*")) {
-            return "UI";
-        } else if (name.matches(".*(entity|model|pojo|dto|vo|bean|data|table|user|product|item|order).*")) {
-            return "DataModel";
-        } else if (name.matches(".*(viewmodel|presenter|usecase|service|manager|handler|repository|datasource|dao).*")) {
-            return "BusinessLogic";
-        } else if (name.matches(".*(intent|navigate|navigation|launch|start|goto|action).*")) {
-            return "Navigation";
-        }
-
-        return "Unknown";
-    }
-
     private String getCategoryColor(String category) {
+        if (category == null) return "#cccccc";
         switch (category) {
             case "UI": return "#93c5fd";
             case "DataModel": return "#fdba74";
@@ -1503,6 +1144,7 @@ public class MainController implements Initializable {
     }
 
     private String getCategoryFillColor(String category) {
+        if (category == null) return "#f2f2f2";
         switch (category) {
             case "UI": return "#e0f2fe";
             case "DataModel": return "#fff4e5";
@@ -1517,57 +1159,14 @@ public class MainController implements Initializable {
         return id.replaceAll("[^A-Za-z0-9_]", "_");
     }
 
-    // In MainController.java, add methods to handle recursive expansion:
-
-    @FXML
-    private void handleExpandSelected() {
-        TreeItem<String> selectedItem = projectTreeView.getSelectionModel().getSelectedItem();
-        if (selectedItem != null) {
-            handleComponentSelection(selectedItem);
-
-            // Find the corresponding graph node and expand it recursively
-            String itemValue = selectedItem.getValue();
-            CodeComponent component = findComponentByName(itemValue);
-            if (component != null && graphManager.containsNode(component.getId())) {
-                graphManager.expandNodeWithChildren(component.getId());
-                statusLabel.setText("Expanded " + component.getName() + " with children");
-            }
-        }
+    // In MainController.java - Replace detectComponentCategoryForDiagrams method with:
+    private String detectComponentCategoryForDiagrams(CodeComponent component) {
+        String category = ComponentCategorizer.detectCategory(component);
+        // Convert to diagram format if needed
+        if ("DATA_MODEL".equals(category)) return "DataModel";
+        if ("BUSINESS_LOGIC".equals(category)) return "BusinessLogic";
+        if ("NAVIGATION".equals(category)) return "Navigation";
+        if ("UNKNOWN".equals(category)) return "Unknown";
+        return category;
     }
-
-    @FXML
-    private void handleExpandAll() {
-        // Expand all root nodes that are currently visible
-        for (GraphNode node : graphManager.getNodeMap().values()) {
-            if (node.isVisible() && !node.isExpanded()) {
-                node.expand();
-            }
-        }
-        statusLabel.setText("Expanded all visible nodes");
-    }
-
-    @FXML
-    private void handleCollapseAll() {
-        for (GraphNode node : graphManager.getNodeMap().values()) {
-            if (node.isExpanded()) {
-                node.collapse();
-            }
-        }
-        statusLabel.setText("Collapsed all nodes");
-    }
-
-    private CodeComponent findComponentByName(String name) {
-        for (CodeComponent component : componentMap.values()) {
-            if (component.getName() != null && component.getName().equalsIgnoreCase(name)) {
-                return component;
-            }
-            // Also check by filename pattern
-            String fileName = component.getFilePath();
-            if (fileName != null && fileName.contains(name.replace(".java", "").replace(".kt", ""))) {
-                return component;
-            }
-        }
-        return null;
-    }
-
 }

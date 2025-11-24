@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
+import com.projectvisualizer.services.ComponentCategorizer;
 public class GraphNode {
     private CodeComponent component;
     private Circle nodeCircle;
@@ -1561,40 +1561,8 @@ public class GraphNode {
         }
     }
 
-    // Add method to detect component category (similar to GraphManager's method)
     private String detectComponentCategory(CodeComponent component) {
-        if (component == null || component.getName() == null) {
-            return "UNKNOWN";
-        }
-
-        String name = component.getName().toLowerCase();
-        String type = component.getType() != null ? component.getType().toLowerCase() : "";
-
-        // UI Components
-        if (name.matches(".*(activity|fragment|adapter|viewholder|view|layout|dialog|menu|button|text|image|list|recycler|card).*") ||
-                type.matches(".*(activity|fragment|adapter|view).*")) {
-            return "UI";
-        }
-
-        // Data Model Components
-        if (name.matches(".*(entity|model|pojo|dto|vo|bean|data|table|user|product|item|order).*") ||
-                type.matches(".*(entity|model|data).*")) {
-            return "DATA_MODEL";
-        }
-
-        // Business Logic Components
-        if (name.matches(".*(viewmodel|presenter|usecase|service|manager|handler|repository|datasource|dao).*") ||
-                type.matches(".*(viewmodel|presenter|usecase|service).*")) {
-            return "BUSINESS_LOGIC";
-        }
-
-        // Navigation Components
-        if (name.matches(".*(intent|navigate|navigation|launch|start|goto|action).*") ||
-                type.matches(".*(intent|navigation).*")) {
-            return "NAVIGATION";
-        }
-
-        return "UNKNOWN";
+        return ComponentCategorizer.detectCategory(component);
     }
 
     public List<GraphNode> getChildren() {
