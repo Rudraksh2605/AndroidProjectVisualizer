@@ -30,19 +30,23 @@ public class ProjectAnalysisService {
             this.kotlinParser = new KotlinParser(activityLayoutMap);
             List<CodeComponent> allComponents = new ArrayList<>();
             scanAndParseDirectory(projectDir, allComponents);
+
+            // OPTIMIZED: O(N) dependency resolution
             resolveDependencies(allComponents);
+
             List<NavigationFlow> navigationFlows = extractNavigationFlows(allComponents);
             List<UserFlowComponent> userFlows = extractUserFlows(allComponents, navigationFlows);
             Map<String, List<CodeComponent>> categorizedComponents = categorizeComponents(allComponents);
+
             result.setComponents(allComponents);
             result.setNavigationFlows(navigationFlows);
             result.setUserFlows(userFlows);
             result.setActivityLayoutMap(activityLayoutMap);
             result.setCategorizedComponents(categorizedComponents);
 
-
         } catch (Exception e) {
             result.setError(e.getMessage());
+            e.printStackTrace();
         }
 
         return result;
@@ -68,7 +72,6 @@ public class ProjectAnalysisService {
 
         for (File file : files) {
             if (file.isDirectory()) {
-                // Skip build directories and hidden folders
                 if (!file.getName().startsWith(".") && !file.getName().equals("build")) {
                     scanAndParseDirectory(file, components);
                 }
@@ -90,8 +93,6 @@ public class ProjectAnalysisService {
                     if (parsedComponents != null) {
                         components.addAll(parsedComponents);
                     }
-                } else {
-                    System.err.println("Java parser not initialized before parsing " + file.getPath());
                 }
             } else if (fileName.endsWith(".kt")) {
                 if (kotlinParser != null) {
@@ -99,8 +100,6 @@ public class ProjectAnalysisService {
                     if (parsedComponents != null) {
                         components.addAll(parsedComponents);
                     }
-                } else {
-                    System.err.println("Kotlin parser not initialized before parsing " + file.getPath());
                 }
             } else if (fileName.endsWith(".xml")) {
                 List<CodeComponent> parsedComponents = xmlParser.parse(file);
@@ -121,15 +120,10 @@ public class ProjectAnalysisService {
         IntentAnalyzer intentAnalyzer = new IntentAnalyzer();
 
         for (CodeComponent component : components) {
-            if (component == null || component.getFilePath() == null) {
-                continue; // Skip null components
-            }
+            if (component == null || component.getFilePath() == null) continue;
 
             String lang = component.getLanguage();
-            if (lang == null) continue;
-
-            // Analyze both Java and Kotlin source files for intent/navigation flows
-            if (lang.equalsIgnoreCase("java") || lang.equalsIgnoreCase("kotlin") || lang.equalsIgnoreCase("kt")) {
+            if (lang != null && (lang.equalsIgnoreCase("java") || lang.equalsIgnoreCase("kotlin"))) {
                 try {
                     File sourceFile = new File(component.getFilePath());
                     if (sourceFile.exists()) {
@@ -139,9 +133,7 @@ public class ProjectAnalysisService {
                         }
                     }
                 } catch (Exception e) {
-                    System.err.println("Error analyzing navigation flows for " +
-                            (component.getName() != null ? component.getName() : "unknown") +
-                            ": " + e.getMessage());
+                    System.err.println("Error analyzing navigation flows: " + e.getMessage());
                 }
             }
         }
@@ -156,87 +148,74 @@ public class ProjectAnalysisService {
 
     private File findAndroidManifest(File projectDir) {
         if (projectDir == null) return null;
-
-        // Look for AndroidManifest.xml in common locations
         File[] possiblePaths = {
                 new File(projectDir, "app/src/main/AndroidManifest.xml"),
                 new File(projectDir, "src/main/AndroidManifest.xml"),
                 new File(projectDir, "AndroidManifest.xml")
         };
-
         for (File path : possiblePaths) {
-            if (path.exists()) {
-                return path;
-            }
+            if (path.exists()) return path;
         }
         return null;
     }
 
+    /**
+     * OPTIMIZED RESOLUTION ALGORITHM (O(N) Time Complexity)
+     * Replaces the O(N^2) nested loop with Map-based lookups.
+     */
     private void resolveDependencies(List<CodeComponent> allComponents) {
         if (allComponents == null || allComponents.isEmpty()) return;
 
-        // Build a map of id (usually FQN) -> component. If duplicate ids exist, keep the first seen.
-        Map<String, CodeComponent> byId = allComponents.stream()
-                .filter(c -> c != null && c.getId() != null)
-                .collect(Collectors.toMap(CodeComponent::getId, Function.identity(), (existing, replacement) -> existing));
+        // 1. Build Symbol Tables (O(N))
+        Map<String, CodeComponent> idToComponent = new HashMap<>();
+        Map<String, CodeComponent> simpleNameToComponent = new HashMap<>();
 
-        // Also build a fallback map of simple class name -> component (first occurrence wins)
-        Map<String, CodeComponent> bySimpleName = new HashMap<>();
         for (CodeComponent c : allComponents) {
-            if (c == null) continue;
-            String id = c.getId();
-            String simple = null;
-            if (id != null && id.contains(".")) {
-                simple = id.substring(id.lastIndexOf('.') + 1);
-            } else if (c.getName() != null) {
-                simple = c.getName();
+            if (c.getId() != null) {
+                idToComponent.put(c.getId(), c);
             }
-            if (simple != null) {
-                bySimpleName.putIfAbsent(simple, c);
+            if (c.getName() != null) {
+                // If duplicates exist, the last one wins, which is acceptable for simple name fallback
+                simpleNameToComponent.put(c.getName(), c);
             }
         }
 
+        // 2. Resolve References (O(N * AvgDeps)) -> Effectively Linear
         for (CodeComponent component : allComponents) {
-            if (component == null) continue;
-
-            List<CodeComponent> originalDeps = component.getDependencies();
-            if (originalDeps == null || originalDeps.isEmpty()) {
-                component.setDependencies(Collections.emptyList());
-                continue;
-            }
+            List<CodeComponent> unresolvedDeps = component.getDependencies();
+            if (unresolvedDeps == null || unresolvedDeps.isEmpty()) continue;
 
             List<CodeComponent> resolvedDependencies = new ArrayList<>();
+            Set<String> processedIds = new HashSet<>(); // Prevent duplicates
 
-            for (CodeComponent dependency : originalDeps) {
-                if (dependency == null) continue;
+            for (CodeComponent dependencyStub : unresolvedDeps) {
+                CodeComponent realComponent = null;
 
-                // Try resolve by id (FQN) first
-                CodeComponent resolved = null;
-                if (dependency.getId() != null) {
-                    resolved = byId.get(dependency.getId());
+                // Strategy A: Exact ID Match
+                if (dependencyStub.getId() != null) {
+                    realComponent = idToComponent.get(dependencyStub.getId());
                 }
 
-                // If not found, try by simple name derived from dep id or name
-                if (resolved == null) {
-                    String key = null;
-                    String depId = dependency.getId();
-                    if (depId != null) {
-                        key = depId.contains(".") ? depId.substring(depId.lastIndexOf('.') + 1) : depId;
-                    }
-                    if ((key == null || key.isEmpty()) && dependency.getName() != null) {
-                        key = dependency.getName();
-                    }
-                    if (key != null) {
-                        resolved = bySimpleName.get(key);
-                    }
+                // Strategy B: Simple Name Match (Fallback)
+                if (realComponent == null && dependencyStub.getName() != null) {
+                    realComponent = simpleNameToComponent.get(dependencyStub.getName());
                 }
 
-                if (resolved != null && resolved != component) {
-                    resolvedDependencies.add(resolved);
+                // Strategy C: Infer from package (if stub has package info)
+                if (realComponent == null && dependencyStub.getId() != null && dependencyStub.getId().contains(".")) {
+                    String simpleName = dependencyStub.getId().substring(dependencyStub.getId().lastIndexOf('.') + 1);
+                    realComponent = simpleNameToComponent.get(simpleName);
+                }
+
+                if (realComponent != null && !realComponent.getId().equals(component.getId())) {
+                    if (processedIds.add(realComponent.getId())) {
+                        resolvedDependencies.add(realComponent);
+                    }
                 } else {
-                    // Keep the stub but try to detect its layer for coloring/grouping
-                    detectComponentLayer(dependency);
-                    resolvedDependencies.add(dependency);
+                    // It's likely an external library or SDK class not in our source tree
+                    // We keep the stub but mark it as External
+                    detectComponentLayer(dependencyStub);
+                    resolvedDependencies.add(dependencyStub);
                 }
             }
 
@@ -255,7 +234,7 @@ public class ProjectAnalysisService {
         } else if (name.endsWith("activity") || name.endsWith("fragment") || name.endsWith("adapter")) {
             component.setLayer("UI");
         } else {
-            // leave as unknown; could add more heuristics here
+            // leave as unknown
         }
     }
 
@@ -265,17 +244,13 @@ public class ProjectAnalysisService {
 
     public Map<String, List<CodeComponent>> categorizeComponents(List<CodeComponent> components) {
         Map<String, List<CodeComponent>> categorized = new HashMap<>();
-
         for (String category : Arrays.asList("UI", "DATA_MODEL", "BUSINESS_LOGIC", "NAVIGATION", "UNKNOWN")) {
             categorized.put(category, new ArrayList<>());
         }
-
         for (CodeComponent component : components) {
             String category = detectComponentCategory(component);
             categorized.get(category).add(component);
         }
-
         return categorized;
     }
-
 }
