@@ -1,8 +1,8 @@
-// GraphNode.java
 package com.projectvisualizer.visualization;
 
 import com.projectvisualizer.model.CodeComponent;
 import com.projectvisualizer.model.ExpansionMode;
+import com.projectvisualizer.services.ComponentCategorizer;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.geometry.Pos;
@@ -18,11 +18,12 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import com.projectvisualizer.services.ComponentCategorizer;
+
 public class GraphNode {
     private CodeComponent component;
     private Circle nodeCircle;
@@ -34,7 +35,6 @@ public class GraphNode {
     private Pane canvas;
     private String currentViewMode = "ALL";
     private ExpansionMode expansionMode = ExpansionMode.CLASS_DEPENDENCIES;
-
 
     public GraphNode(CodeComponent component, Pane canvas) {
         this.component = component;
@@ -173,7 +173,6 @@ public class GraphNode {
         List<CodeComponent> childComponents = getChildComponents();
 
         if (childComponents.isEmpty()) {
-            // If no child components found, show a message or handle gracefully
             System.out.println("No child components found for " + component.getName() + " in mode: " + expansionMode);
             return;
         }
@@ -183,7 +182,17 @@ public class GraphNode {
         int index = 0;
 
         for (CodeComponent childComponent : childComponents) {
-            GraphNode childNode = new GraphNode(childComponent, canvas);
+            // UPDATED: Check for the REAL object in registry to ensure children are expandable too
+            CodeComponent realChild = childComponent;
+            if (canvas.getUserData() instanceof GraphManager) {
+                GraphManager gm = (GraphManager) canvas.getUserData();
+                CodeComponent lookup = gm.getCanonicalComponent(childComponent.getId());
+                if (lookup != null) {
+                    realChild = lookup;
+                }
+            }
+
+            GraphNode childNode = new GraphNode(realChild, canvas);
 
             // IMPORTANT: Copy expansion mode and view mode from parent to child
             childNode.setExpansionMode(this.expansionMode);
@@ -229,34 +238,27 @@ public class GraphNode {
 
         // Filter by current view mode
         return childComponents.stream()
-                .filter(component -> shouldShowInViewMode(component))
+                .filter(component -> shouldShowInViewMode(component, currentViewMode))
                 .collect(Collectors.toList());
     }
 
     private List<CodeComponent> getUIComponents() {
         List<CodeComponent> uiComponents = new ArrayList<>();
 
-        // First, add actual Android UI components from dependencies
         if (component.getDependencies() != null) {
             for (CodeComponent dep : component.getDependencies()) {
-                // Only include actual UI components in UI expansion mode
                 if (isUIComponent(dep) || isAndroidUIComponent(dep)) {
                     uiComponents.add(dep);
                 }
             }
         }
 
-        // Add intents
         if (component.getIntents() != null) {
-            for (CodeComponent intent : component.getIntents()) {
-                uiComponents.add(intent);
-            }
+            uiComponents.addAll(component.getIntents());
         }
 
-        // Add UI resources like strings, dimensions, etc.
         if (component.getResourcesUsed() != null) {
             for (String resource : component.getResourcesUsed()) {
-                // Only add actual UI resources, not class dependencies
                 if (isUIResource(resource)) {
                     CodeComponent resourceComponent = new CodeComponent();
                     resourceComponent.setId("resource:" + resource);
@@ -268,7 +270,6 @@ public class GraphNode {
             }
         }
 
-        // Add composables if available (Kotlin specific)
         if (component.getComposablesUsed() != null) {
             for (String composable : component.getComposablesUsed()) {
                 CodeComponent composableComponent = new CodeComponent();
@@ -280,7 +281,6 @@ public class GraphNode {
             }
         }
 
-        // Add view bindings
         if (component.isViewBindingUsed()) {
             CodeComponent bindingComponent = new CodeComponent();
             bindingComponent.setId("viewbinding:" + component.getId());
@@ -290,7 +290,6 @@ public class GraphNode {
             uiComponents.add(bindingComponent);
         }
 
-        // Add data bindings
         if (component.isDataBindingUsed()) {
             CodeComponent dataBindingComponent = new CodeComponent();
             dataBindingComponent.setId("databinding:" + component.getId());
@@ -300,7 +299,6 @@ public class GraphNode {
             uiComponents.add(dataBindingComponent);
         }
 
-        // Add layout files if this is a UI component
         if (isUIComponent(component) && component.getFilePath() != null) {
             String filePath = component.getFilePath();
             if (filePath.endsWith(".xml") && filePath.contains("layout")) {
@@ -316,12 +314,9 @@ public class GraphNode {
         return uiComponents;
     }
 
-    private boolean shouldShowInViewMode(CodeComponent component) {
+    public boolean shouldShowInViewMode(CodeComponent component, String currentViewMode) {
         if ("ALL".equals(currentViewMode)) return true;
-
-        // Add your view mode filtering logic here
-        // Similar to the shouldShowComponent method in GraphManager
-        String category = detectComponentCategory(component); // You'll need this method
+        String category = detectComponentCategory(component);
         return currentViewMode.equals(category);
     }
 
@@ -340,17 +335,14 @@ public class GraphNode {
     private List<CodeComponent> getClassDependencies() {
         List<CodeComponent> classDependencies = new ArrayList<>();
 
-        // Add regular dependencies (only actual class dependencies, not UI components)
         if (component.getDependencies() != null) {
             for (CodeComponent dep : component.getDependencies()) {
-                // Filter out UI components from class dependencies
                 if (!isUIComponent(dep) && !isAndroidUIComponent(dep)) {
                     classDependencies.add(dep);
                 }
             }
         }
 
-        // Add extended class if available (only if it's not a UI component)
         if (component.getExtendsClass() != null && !component.getExtendsClass().isEmpty()) {
             if (!isAndroidUIComponentByName(component.getExtendsClass())) {
                 CodeComponent extendsComponent = new CodeComponent();
@@ -362,7 +354,6 @@ public class GraphNode {
             }
         }
 
-        // Add implemented interfaces if available
         if (component.getImplementsList() != null) {
             for (String interfaceName : component.getImplementsList()) {
                 if (!isAndroidUIComponentByName(interfaceName)) {
@@ -379,13 +370,10 @@ public class GraphNode {
         return classDependencies;
     }
 
-    // Helper method to detect Android UI components by name
     private boolean isAndroidUIComponentByName(String className) {
         if (className == null) return false;
-
         String lowerName = className.toLowerCase();
 
-        // Common Android UI classes that should NOT appear in class dependencies
         return lowerName.contains("button") ||
                 lowerName.contains("textview") ||
                 lowerName.contains("edittext") ||
@@ -435,12 +423,10 @@ public class GraphNode {
     private boolean isAndroidUIComponent(CodeComponent component) {
         if (component == null) return false;
 
-        // Check if it's a known Android UI component
         if (isAndroidUIComponentByName(component.getName())) {
             return true;
         }
 
-        // Check package name for Android UI components
         String packageName = component.getPackageName();
         if (packageName != null) {
             return packageName.startsWith("android.") ||
@@ -450,7 +436,6 @@ public class GraphNode {
                     packageName.contains(".custom.");
         }
 
-        // Check file path for Android resources
         String filePath = component.getFilePath();
         if (filePath != null) {
             return filePath.contains("/res/") ||
@@ -463,7 +448,6 @@ public class GraphNode {
         return false;
     }
 
-    // Enhanced UI component detection for both Java and Kotlin
     private boolean isUIComponent(CodeComponent component) {
         if (component == null || component.getName() == null) return false;
 
@@ -472,12 +456,10 @@ public class GraphNode {
         String extendsClass = component.getExtendsClass();
         String type = component.getType();
 
-        // Check by layer first
         if ("UI".equals(layer)) {
             return true;
         }
 
-        // Check by type
         if (type != null) {
             String lowerType = type.toLowerCase();
             if (lowerType.contains("activity") ||
@@ -492,7 +474,6 @@ public class GraphNode {
             }
         }
 
-        // Check by name patterns (works for both Java and Kotlin)
         boolean isUIByName = name.endsWith("activity") ||
                 name.endsWith("fragment") ||
                 name.endsWith("adapter") ||
@@ -509,7 +490,6 @@ public class GraphNode {
                 name.contains("recycler") ||
                 name.contains("card");
 
-        // Check extends class (works for both Java and Kotlin)
         boolean isUIByExtends = extendsClass != null &&
                 (extendsClass.endsWith("Activity") ||
                         extendsClass.endsWith("Fragment") ||
@@ -523,13 +503,11 @@ public class GraphNode {
     }
 
     private void removeChildNodes() {
-        // Remove connection lines
         for (Line line : connectionLines) {
             canvas.getChildren().remove(line);
         }
         connectionLines.clear();
 
-        // Remove child nodes recursively
         for (GraphNode child : children) {
             child.removeFromCanvas();
             canvas.getChildren().remove(child.getContainer());
@@ -544,13 +522,11 @@ public class GraphNode {
     private Line createConnectionLine(VBox parent, VBox child) {
         Line line = new Line();
 
-        // Bind line to parent and child positions
         line.startXProperty().bind(parent.layoutXProperty().add(parent.widthProperty().divide(2)));
         line.startYProperty().bind(parent.layoutYProperty().add(parent.heightProperty().divide(2)));
         line.endXProperty().bind(child.layoutXProperty().add(child.widthProperty().divide(2)));
         line.endYProperty().bind(child.layoutYProperty().add(child.heightProperty().divide(2)));
 
-        // Style based on expansion mode
         if (expansionMode == ExpansionMode.UI_COMPONENTS) {
             line.setStroke(Color.LIGHTBLUE);
             line.getStrokeDashArray().addAll(3.0, 3.0);
@@ -602,29 +578,23 @@ public class GraphNode {
         }
     }
 
-
     private String getDisplayName() {
         if (component == null) return "Unknown";
 
         String name = component.getName();
         if (name == null) {
-            // Fallback to ID if name is null
             name = component.getId();
             if (name == null) return "Unknown";
         }
 
-        // Special handling for navigation nodes
         if (isIntentNode()) {
             String cleanName = cleanDisplayName(name);
             String target = extractTargetActivityFromIntent();
-
-            // Determine navigation type for display
             String navType = getNavigationType();
 
             if (target != null && !target.isEmpty()) {
                 return navType + " to " + cleanDisplayName(target);
             } else {
-                // If no specific target found, use a more descriptive name
                 return createDescriptiveNavigationName(cleanName, navType);
             }
         }
@@ -636,28 +606,14 @@ public class GraphNode {
         if (name == null) return "Unknown";
 
         String cleaned = name.trim();
-
-        // Remove common navigation prefixes and suffixes
         cleaned = cleaned.replaceAll("(?i)(action_|r\\.id\\.|navigate\\(|startactivity\\(|new\\s+)", "");
-
-        // Remove file extensions and common suffixes
         cleaned = cleaned.replaceAll("\\.(java|kt|xml|class)$", "");
         cleaned = cleaned.replaceAll("::class\\.java", "");
         cleaned = cleaned.replaceAll("\\(\\)", "");
-
-        // Remove special characters but keep spaces, letters, numbers
         cleaned = cleaned.replaceAll("[^a-zA-Z0-9\\s_]", " ");
-
-        // Replace underscores with spaces
         cleaned = cleaned.replaceAll("_", " ");
-
-        // Replace multiple spaces with single space
         cleaned = cleaned.replaceAll("\\s+", " ");
-
-        // Capitalize first letter of each word for better readability
         cleaned = capitalizeWords(cleaned);
-
-        // Handle common abbreviations
         cleaned = fixCommonAbbreviations(cleaned);
 
         return cleaned.trim();
@@ -702,7 +658,6 @@ public class GraphNode {
         String badge = component.getComponentType() != null ? component.getComponentType() : component.getType();
         sb.append("Type: ").append(badge != null ? cleanDisplayName(badge) : "Unknown").append("\n");
 
-        // Add navigation-specific information
         if (isIntentNode()) {
             String targetActivity = extractTargetActivityFromIntent();
             String navType = getNavigationType();
@@ -714,7 +669,6 @@ public class GraphNode {
                 sb.append("\nTarget: Unknown");
             }
 
-            // Add navigation method details
             String methodDetails = getNavigationMethodDetails();
             if (methodDetails != null) {
                 sb.append("\nMethod: ").append(methodDetails);
@@ -723,12 +677,10 @@ public class GraphNode {
             sb.append("\nClick to navigate to target");
         }
 
-        // Add package info if available
         if (component.getPackageName() != null && !component.getPackageName().isEmpty()) {
             sb.append("Package: ").append(component.getPackageName()).append("\n");
         }
 
-        // Add layer info
         sb.append("Layer: ").append(component.getLayer() != null ? component.getLayer() : "Unknown").append("\n");
 
         return sb.toString();
@@ -736,7 +688,6 @@ public class GraphNode {
 
     private String getNavigationType() {
         String name = component.getName().toLowerCase();
-        String type = component.getType().toLowerCase();
 
         if (name.contains("fragmenttransaction") || name.contains("replace") || name.contains("addtobackstack")) {
             return "Fragment Transaction";
@@ -787,27 +738,17 @@ public class GraphNode {
         return expansionMode;
     }
 
-//    public void setExpansionMode(ExpansionMode expansionMode) {
-//        this.expansionMode = expansionMode;
-//        if (expanded) {
-//            refreshExpansion();
-//        }
-//    }
-
     private void setupEventHandlers() {
-        // Handle intent node clicks
         nodeCircle.setOnMouseClicked(event -> {
             if (event.getClickCount() == 1 && isIntentNode()) {
                 handleIntentNodeClick();
-                event.consume(); // Prevent double-click expansion for intent nodes
+                event.consume();
             } else if (event.getClickCount() == 2) {
                 toggleExpansion();
             }
         });
 
-        // Add drag functionality to prevent overlapping during manual movement
         nodeContainer.setOnMousePressed(event -> {
-            // Bring to front when clicked
             nodeContainer.toFront();
             for (Line line : connectionLines) {
                 line.toFront();
@@ -819,7 +760,6 @@ public class GraphNode {
                 double newX = event.getSceneX() - nodeContainer.getWidth() / 2;
                 double newY = event.getSceneY() - nodeContainer.getHeight() / 2;
 
-                // Check for collisions with other nodes
                 if (!wouldOverlapWithOtherNodes(newX, newY)) {
                     nodeContainer.setLayoutX(newX);
                     nodeContainer.setLayoutY(newY);
@@ -827,31 +767,23 @@ public class GraphNode {
             }
         });
 
-        // Update expand arrow to show current mode
         Text expandArrow = new Text("▼");
         expandArrow.setStyle("-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #666;");
         expandArrow.setOnMouseClicked(event -> toggleExpansion());
 
-        // Add tooltip to expand arrow to show current mode
         Tooltip arrowTooltip = new Tooltip("Double-click to expand\nCurrent mode: " + expansionMode.getDisplayName());
         Tooltip.install(expandArrow, arrowTooltip);
 
         nodeContainer.getChildren().add(expandArrow);
 
-        // Update tooltip to show intent information
         updateIntentTooltip();
     }
 
-    // Add this method to check for overlaps during drag
     private boolean wouldOverlapWithOtherNodes(double x, double y) {
         if (canvas == null) return false;
 
-        // Get all nodes except this one
-        java.util.List<GraphNode> otherNodes = new ArrayList<>();
         for (javafx.scene.Node node : canvas.getChildren()) {
             if (node instanceof VBox && node != nodeContainer) {
-                // This is a simplified check - in a real implementation,
-                // you'd want to maintain a reference to other GraphNode objects
                 double otherX = ((VBox) node).getLayoutX();
                 double otherY = ((VBox) node).getLayoutY();
                 double otherWidth = node.getBoundsInLocal().getWidth();
@@ -860,7 +792,6 @@ public class GraphNode {
                 double thisWidth = nodeContainer.getBoundsInLocal().getWidth();
                 double thisHeight = nodeContainer.getBoundsInLocal().getHeight();
 
-                // Calculate distance between centers
                 double centerX1 = x + thisWidth / 2;
                 double centerY1 = y + thisHeight / 2;
                 double centerX2 = otherX + otherWidth / 2;
@@ -868,7 +799,7 @@ public class GraphNode {
 
                 double distance = Math.sqrt(Math.pow(centerX1 - centerX2, 2) + Math.pow(centerY1 - centerY2, 2));
 
-                if (distance < 80) { // Minimum drag distance
+                if (distance < 80) {
                     return true;
                 }
             }
@@ -879,13 +810,10 @@ public class GraphNode {
 
     private void handleIntentNodeClick() {
         if (isIntentNode()) {
-            // Extract target activity from intent information
             String targetActivity = extractTargetActivityFromIntent();
             if (targetActivity != null && !targetActivity.isEmpty()) {
-                // Find or create the target activity component
                 CodeComponent targetComponent = findOrCreateTargetComponent(targetActivity);
                 if (targetComponent != null) {
-                    // Create and position the target activity node
                     createTargetActivityNode(targetComponent);
                 }
             }
@@ -900,7 +828,6 @@ public class GraphNode {
 
         if (type == null || name == null) return false;
 
-        // Check type first
         boolean isIntentType = type.equalsIgnoreCase("Intent") ||
                 type.toLowerCase().contains("intent") ||
                 type.equalsIgnoreCase("Navigation") ||
@@ -911,7 +838,6 @@ public class GraphNode {
                 type.equalsIgnoreCase("NavController") ||
                 type.equalsIgnoreCase("ComposeNavigation");
 
-        // Check name patterns for all navigation types
         boolean isIntentName = name.toLowerCase().contains("intent") ||
                 name.toLowerCase().contains("navigate") ||
                 name.toLowerCase().contains("navigation") ||
@@ -940,9 +866,8 @@ public class GraphNode {
         if (component == null || component.getName() == null) return null;
 
         String name = component.getName();
-        String originalName = name; // Keep original for fallback
+        String originalName = name;
 
-        // Method 1: Check if intent has explicit target in dependencies
         if (component.getDependencies() != null && !component.getDependencies().isEmpty()) {
             for (CodeComponent dep : component.getDependencies()) {
                 if (dep != null && isTargetComponent(dep)) {
@@ -954,43 +879,35 @@ public class GraphNode {
             }
         }
 
-        // Method 2: Parse Navigation Component patterns
         String navTarget = extractNavigationComponentTarget(name);
         if (isValidTargetName(navTarget)) return navTarget;
 
-        // Method 3: Parse Fragment Transaction patterns
         String fragmentTarget = extractFragmentTransactionTarget(name);
         if (isValidTargetName(fragmentTarget)) return fragmentTarget;
 
-        // Method 4: Parse Activity Intent patterns
         String activityTarget = extractActivityIntentTarget(name);
         if (isValidTargetName(activityTarget)) return activityTarget;
 
-        // Method 5: Parse Compose Navigation patterns
         String composeTarget = extractComposeNavigationTarget(name);
         if (isValidTargetName(composeTarget)) return composeTarget;
 
-        // Method 6: Enhanced pattern matching from component name
         String patternTarget = extractFromCommonPatterns(name);
         if (isValidTargetName(patternTarget)) return patternTarget;
 
-        // Method 7: Extract from component properties
         String propertyTarget = getComponentProperty("targetActivity");
         if (isValidTargetName(propertyTarget)) return propertyTarget;
 
-        // Final fallback: Try to extract any meaningful name from the original name
         String fallbackTarget = extractAnyMeaningfulName(originalName);
         if (fallbackTarget != null && !fallbackTarget.equals("TargetScreen")) {
             return fallbackTarget;
         }
 
-        return null; // Return null instead of "TargetScreen" to avoid generic names
+        return null;
     }
 
     private String extractFromCommonPatterns(String name) {
         if (name == null) return null;
 
-        // Pattern 1: navigateToXxx, goToXxx, openXxx, launchXxx
         String[] prefixes = {"navigateTo", "goTo", "open", "launch", "start", "show"};
         for (String prefix : prefixes) {
             if (name.toLowerCase().contains(prefix.toLowerCase())) {
@@ -1003,7 +920,6 @@ public class GraphNode {
             }
         }
 
-        // Pattern 2: xxxIntent, xxxNavigation
         String[] suffixes = {"Intent", "Navigation", "Navigate", "Nav"};
         for (String suffix : suffixes) {
             if (name.endsWith(suffix) && name.length() > suffix.length()) {
@@ -1015,18 +931,15 @@ public class GraphNode {
             }
         }
 
-        // Pattern 3: action_xxx_to_yyy (Navigation Component)
         if (name.contains("action_") && name.contains("_to_")) {
             String[] parts = name.split("_to_");
             if (parts.length > 1) {
                 String targetPart = parts[1];
-                // Remove any remaining underscores or parameters
                 targetPart = targetPart.split("[_\\[\\]()]")[0];
                 return formatTargetName(targetPart);
             }
         }
 
-        // Pattern 4: R.id.action_xxx_to_yyy
         if (name.contains("R.id.action_") && name.contains("_to_")) {
             String targetPart = name.replaceAll(".*_to_", "");
             targetPart = targetPart.split("[^a-zA-Z]")[0];
@@ -1035,7 +948,6 @@ public class GraphNode {
 
         return null;
     }
-
 
     private boolean isTargetComponent(CodeComponent component) {
         if (component == null) return false;
@@ -1057,7 +969,6 @@ public class GraphNode {
     }
 
     private String extractNavigationComponentTarget(String cleanName) {
-        // Pattern: action_current_to_target
         if (cleanName.toLowerCase().contains("action_")) {
             String[] parts = cleanName.split("_");
             for (int i = 0; i < parts.length; i++) {
@@ -1067,7 +978,6 @@ public class GraphNode {
             }
         }
 
-        // Pattern: R.id.action_homeFragment_to_detailsFragment
         if (cleanName.toLowerCase().contains("r.id.action_")) {
             String[] parts = cleanName.split("_");
             for (int i = 0; i < parts.length; i++) {
@@ -1077,7 +987,6 @@ public class GraphNode {
             }
         }
 
-        // Pattern: navigate(R.id.action_profile)
         if (cleanName.toLowerCase().contains("navigate(r.id.")) {
             String target = cleanName.replaceAll(".*navigate\\(r\\.id\\.(action_)?", "")
                     .replaceAll("[^a-zA-Z].*", "");
@@ -1090,7 +999,6 @@ public class GraphNode {
     }
 
     private String extractFragmentTransactionTarget(String cleanName) {
-        // Pattern: replace(R.id.container, new NextFragment())
         if (cleanName.toLowerCase().contains("replace") &&
                 cleanName.toLowerCase().contains("new ")) {
             String target = cleanName.replaceAll(".*new\\s+", "")
@@ -1101,7 +1009,6 @@ public class GraphNode {
             }
         }
 
-        // Pattern: NextFragment() in transaction
         if (cleanName.toLowerCase().contains("fragment") &&
                 cleanName.contains("(") && cleanName.contains(")")) {
             String target = cleanName.replaceAll(".*\\b([A-Z][a-zA-Z]*Fragment)\\(.*", "$1");
@@ -1114,7 +1021,6 @@ public class GraphNode {
     }
 
     private String extractActivityIntentTarget(String cleanName) {
-        // Pattern: Intent(this, NextActivity.class)
         if (cleanName.toLowerCase().contains("intent") &&
                 cleanName.contains(",")) {
             String target = cleanName.replaceAll(".*,\\s*", "")
@@ -1126,7 +1032,6 @@ public class GraphNode {
             }
         }
 
-        // Pattern: common navigation prefixes
         String[] patterns = {
                 "To", "NavigateTo", "Open", "Launch", "Start", "Goto", "GoTo",
                 "Action", "Destination", "Screen", "Route"
@@ -1137,14 +1042,12 @@ public class GraphNode {
                 String[] parts = cleanName.split(pattern);
                 if (parts.length > 1 && !parts[1].trim().isEmpty()) {
                     String target = parts[1].trim();
-                    // Clean up the target
                     target = target.replaceAll("[^a-zA-Z0-9].*", "");
                     if (!target.isEmpty()) {
-                        // Add appropriate suffix if missing
                         if (!target.toLowerCase().contains("activity") &&
                                 !target.toLowerCase().contains("fragment") &&
                                 !target.toLowerCase().contains("composable")) {
-                            target += "Activity"; // Default to Activity
+                            target += "Activity";
                         }
                         return target;
                     }
@@ -1156,7 +1059,6 @@ public class GraphNode {
     }
 
     private String extractComposeNavigationTarget(String cleanName) {
-        // Pattern: navController.navigate("details")
         if (cleanName.toLowerCase().contains("navigate(\"")) {
             String target = cleanName.replaceAll(".*navigate\\(\"", "")
                     .replaceAll("\".*", "");
@@ -1165,7 +1067,6 @@ public class GraphNode {
             }
         }
 
-        // Pattern: composable("details")
         if (cleanName.toLowerCase().contains("composable(\"")) {
             String target = cleanName.replaceAll(".*composable\\(\"", "")
                     .replaceAll("\".*", "");
@@ -1189,7 +1090,6 @@ public class GraphNode {
             }
         }
 
-        // If no "to" found, use the last part
         if (parts.length > 0) {
             return capitalizeWords(parts[parts.length - 1]);
         }
@@ -1197,60 +1097,26 @@ public class GraphNode {
         return null;
     }
 
-    private String extractFallbackTarget(String cleanName) {
-        // Common activity patterns
-        if (cleanName.toLowerCase().contains("main")) return "MainActivity";
-        if (cleanName.toLowerCase().contains("login")) return "LoginActivity";
-        if (cleanName.toLowerCase().contains("home")) return "HomeActivity";
-        if (cleanName.toLowerCase().contains("profile")) return "ProfileActivity";
-        if (cleanName.toLowerCase().contains("settings")) return "SettingsActivity";
-        if (cleanName.toLowerCase().contains("detail")) return "DetailActivity";
-        if (cleanName.toLowerCase().contains("dashboard")) return "DashboardActivity";
-        if (cleanName.toLowerCase().contains("splash")) return "SplashActivity";
-
-        // Common fragment patterns
-        if (cleanName.toLowerCase().contains("list")) return "ListFragment";
-        if (cleanName.toLowerCase().contains("detail")) return "DetailFragment";
-        if (cleanName.toLowerCase().contains("profile")) return "ProfileFragment";
-        if (cleanName.toLowerCase().contains("settings")) return "SettingsFragment";
-
-        // Generic fallback
-        if (cleanName.toLowerCase().contains("activity")) {
-            return cleanName.replace("Intent", "")
-                    .replace("Navigation", "")
-                    .replace("Navigate", "")
-                    .trim();
-        }
-
-        return "TargetScreen";
-    }
-
     private CodeComponent findOrCreateTargetComponent(String targetActivity) {
-        // First, try to find existing component in the graph manager
+        // UPDATED: Use the central registry in GraphManager to find the REAL component
         if (canvas.getUserData() instanceof GraphManager) {
             GraphManager graphManager = (GraphManager) canvas.getUserData();
-            if (graphManager.containsNode(targetActivity)) {
-                return graphManager.getNodeMap().get(targetActivity).getComponent();
-            }
 
-            // Also try to find by name pattern
-            for (GraphNode existingNode : graphManager.getNodeMap().values()) {
-                CodeComponent existingComponent = existingNode.getComponent();
-                if (existingComponent.getName() != null &&
-                        existingComponent.getName().equalsIgnoreCase(targetActivity)) {
-                    return existingComponent;
-                }
+            // Try to find by canonical ID or simple name using new smart lookup
+            CodeComponent realComponent = graphManager.getCanonicalComponent(targetActivity);
+
+            if (realComponent != null) {
+                return realComponent;
             }
         }
 
-        // Create a new target activity component
+        // Fallback: Create a stub only if we absolutely cannot find the real code
         CodeComponent targetComponent = new CodeComponent();
         targetComponent.setId("activity:" + targetActivity);
         targetComponent.setName(targetActivity);
         targetComponent.setType("Activity");
         targetComponent.setLayer("UI");
 
-        // Set additional properties based on common Android patterns
         if (targetActivity.toLowerCase().contains("activity")) {
             targetComponent.setLanguage("Java");
             targetComponent.setComponentType("Activity");
@@ -1264,27 +1130,22 @@ public class GraphNode {
     private void createTargetActivityNode(CodeComponent targetComponent) {
         GraphNode targetNode = new GraphNode(targetComponent, canvas);
 
-        // Position the target node relative to the intent node
         double intentX = nodeContainer.getLayoutX();
         double intentY = nodeContainer.getLayoutY();
 
-        // Position target to the right of the intent node with some offset
         double targetX = intentX + 200;
         double targetY = intentY;
 
         targetNode.getContainer().setLayoutX(targetX);
         targetNode.getContainer().setLayoutY(targetY);
 
-        // Create connection from intent to target
         Line intentConnection = createIntentConnectionLine(nodeContainer, targetNode.getContainer());
         connectionLines.add(intentConnection);
         canvas.getChildren().add(intentConnection);
 
-        // Add target node to canvas
         canvas.getChildren().add(targetNode.getContainer());
         children.add(targetNode);
 
-        // Animate the appearance
         animateTargetNodeAppearance(targetNode);
     }
 
@@ -1296,12 +1157,10 @@ public class GraphNode {
         line.endXProperty().bind(target.layoutXProperty().add(target.widthProperty().divide(2)));
         line.endYProperty().bind(target.layoutYProperty().add(target.heightProperty().divide(2)));
 
-        // Style for intent connections - different from regular connections
         line.setStroke(Color.DARKORANGE);
         line.setStrokeWidth(3);
-        line.getStrokeDashArray().addAll(5.0, 5.0); // Dashed line for navigation
+        line.getStrokeDashArray().addAll(5.0, 5.0);
 
-        // Add arrow head effect
         line.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
 
         return line;
@@ -1310,19 +1169,16 @@ public class GraphNode {
     private void animateTargetNodeAppearance(GraphNode targetNode) {
         VBox targetContainer = targetNode.getContainer();
 
-        // Scale animation
         ScaleTransition scaleTransition = new ScaleTransition(Duration.millis(500), targetContainer);
         scaleTransition.setFromX(0.1);
         scaleTransition.setFromY(0.1);
         scaleTransition.setToX(1.0);
         scaleTransition.setToY(1.0);
 
-        // Fade animation
         FadeTransition fadeTransition = new FadeTransition(Duration.millis(500), targetContainer);
         fadeTransition.setFromValue(0.0);
         fadeTransition.setToValue(1.0);
 
-        // Pulse animation to highlight the new node
         ScaleTransition pulseTransition = new ScaleTransition(Duration.millis(300), targetContainer);
         pulseTransition.setFromX(1.0);
         pulseTransition.setFromY(1.0);
@@ -1331,7 +1187,6 @@ public class GraphNode {
         pulseTransition.setAutoReverse(true);
         pulseTransition.setCycleCount(2);
 
-        // Play animations in sequence
         javafx.animation.SequentialTransition sequentialTransition =
                 new javafx.animation.SequentialTransition(scaleTransition, pulseTransition);
         javafx.animation.ParallelTransition parallelTransition =
@@ -1361,7 +1216,6 @@ public class GraphNode {
 
         switch (propertyName) {
             case "targetActivity":
-                // Look for common target activity patterns in the name
                 if (name.contains("To") || name.contains("Navigate")) {
                     String[] parts = name.split("To|Navigate");
                     if (parts.length > 1) {
@@ -1373,7 +1227,6 @@ public class GraphNode {
                 break;
 
             case "navigationDestination":
-                // Extract destination from navigation patterns
                 if (name.contains("action_")) {
                     String[] parts = name.split("_");
                     for (int i = 0; i < parts.length; i++) {
@@ -1391,14 +1244,11 @@ public class GraphNode {
     private String extractFirstMeaningfulWord(String text) {
         if (text == null || text.trim().isEmpty()) return null;
 
-        // Remove common prefixes and non-word characters
-        text = text.replaceAll("^[^a-zA-Z]*", ""); // Remove leading non-letters
+        text = text.replaceAll("^[^a-zA-Z]*", "");
 
-        // Split by non-word characters and take the first part
         String[] words = text.split("[^a-zA-Z0-9]");
         if (words.length > 0 && !words[0].isEmpty()) {
             String word = words[0];
-            // Skip very short or common words
             if (word.length() > 2 && !isCommonWord(word)) {
                 return word;
             }
@@ -1418,17 +1268,14 @@ public class GraphNode {
     private String formatTargetName(String baseName) {
         if (baseName == null || baseName.isEmpty()) return null;
 
-        // Capitalize first letter
         String formatted = baseName.substring(0, 1).toUpperCase() +
                 baseName.substring(1).toLowerCase();
 
-        // Add appropriate suffix if missing
         if (!formatted.toLowerCase().endsWith("activity") &&
                 !formatted.toLowerCase().endsWith("fragment") &&
                 !formatted.toLowerCase().endsWith("screen") &&
                 !formatted.toLowerCase().endsWith("composable")) {
 
-            // Default to Activity for now, but we could be smarter based on context
             formatted += "Activity";
         }
 
@@ -1438,7 +1285,6 @@ public class GraphNode {
     private String extractAnyMeaningfulName(String name) {
         if (name == null) return null;
 
-        // Look for camelCase words or PascalCase words
         String[] words = name.split("(?<=[a-z])(?=[A-Z])|[_\\s]+");
 
         for (String word : words) {
@@ -1462,12 +1308,10 @@ public class GraphNode {
     private String extractMeaningfulName(String name) {
         if (name == null) return null;
 
-        // Remove common prefixes and file extensions
         name = name.replaceAll("^(R\\.id\\.|R\\.string\\.|@string/|@id/|action_|navigate|goTo|open|launch)", "")
                 .replaceAll("\\.(java|kt|class|xml)$", "")
                 .replaceAll("::class.*", "");
 
-        // Extract the most meaningful part (usually the last segment)
         String[] parts = name.split("[./_]");
         if (parts.length > 0) {
             String lastPart = parts[parts.length - 1];
@@ -1484,10 +1328,8 @@ public class GraphNode {
             return false;
         }
 
-        // Should not be too short
         if (name.length() < 3) return false;
 
-        // Should not contain common navigation words
         String lower = name.toLowerCase();
         return !lower.contains("intent") &&
                 !lower.contains("navigation") &&
@@ -1499,13 +1341,11 @@ public class GraphNode {
     }
 
     private String createDescriptiveNavigationName(String cleanName, String navType) {
-        // Extract any meaningful words from the name
         String meaningfulPart = extractAnyMeaningfulName(cleanName);
         if (meaningfulPart != null && !meaningfulPart.equals("TargetScreen")) {
             return navType + ": " + meaningfulPart;
         }
 
-        // Fallback to cleaned name without generic terms
         String descriptiveName = cleanName.replace("Intent", "")
                 .replace("intent", "")
                 .replace("Navigation", "")
@@ -1547,7 +1387,6 @@ public class GraphNode {
             child.setVisible(shouldBeVisible);
             child.setConnectionLinesVisible(shouldBeVisible);
 
-            // Recursively update if this child is expanded
             if (child.isExpanded()) {
                 child.updateChildrenVisibility(visibilityFilter);
             }
@@ -1568,14 +1407,5 @@ public class GraphNode {
     public List<GraphNode> getChildren() {
         return new ArrayList<>(children);
     }
-
-    // Add the shouldShowInViewMode method that takes both parameters
-    public boolean shouldShowInViewMode(CodeComponent component, String currentViewMode) {
-        if ("ALL".equals(currentViewMode)) return true;
-
-        String category = detectComponentCategory(component);
-        return currentViewMode.equals(category);
-    }
-
 
 }

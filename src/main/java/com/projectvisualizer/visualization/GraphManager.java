@@ -19,6 +19,9 @@ public class GraphManager {
     private Map<String, List<CodeComponent>> categorizedComponents;
     private String currentViewMode = "ALL";
 
+    // NEW: Central Registry to store the "Real" data
+    private Map<String, CodeComponent> componentRegistry;
+
     private Set<CodeComponent> activeComponents;
 
     public GraphManager(Pane canvas) {
@@ -26,6 +29,7 @@ public class GraphManager {
         this.nodeMap = new HashMap<>();
         this.layoutManager = new GraphLayoutManager();
         this.categorizedComponents = new HashMap<>();
+        this.componentRegistry = new HashMap<>(); // Initialize registry
         this.activeComponents = new HashSet<>();
 
         categorizedComponents.put("UI", new ArrayList<>());
@@ -51,7 +55,39 @@ public class GraphManager {
         });
 
         setCanvasUserData();
+    }
 
+    /**
+     * NEW: Looks up the "Real" component containing full dependencies.
+     * Handles fuzzy matching (e.g., "MainActivity" -> "com.example.MainActivity")
+     */
+    public CodeComponent getCanonicalComponent(String identifier) {
+        if (identifier == null) return null;
+
+        // 1. Try exact ID match
+        if (componentRegistry.containsKey(identifier)) {
+            return componentRegistry.get(identifier);
+        }
+
+        // 2. Try handling "activity:Name" format often used in GraphNode
+        String cleanIdentifier = identifier;
+        if (identifier.contains(":")) {
+            cleanIdentifier = identifier.substring(identifier.indexOf(":") + 1);
+        }
+
+        // 3. Search by simple name (case-insensitive)
+        for (CodeComponent comp : componentRegistry.values()) {
+            // Check Name
+            if (comp.getName() != null && comp.getName().equalsIgnoreCase(cleanIdentifier)) {
+                return comp;
+            }
+            // Check ID ending (e.g., id is com.example.MainActivity, identifier is MainActivity)
+            if (comp.getId() != null && comp.getId().endsWith("." + cleanIdentifier)) {
+                return comp;
+            }
+        }
+
+        return null;
     }
 
     public void addComponentToGraph(CodeComponent component) {
@@ -234,17 +270,24 @@ public class GraphManager {
 
     public void categorizeComponents(List<CodeComponent> components) {
         categorizedComponents.forEach((k, v) -> v.clear());
+        componentRegistry.clear(); // Clear registry
 
         for (CodeComponent component : components) {
             String category = detectComponentCategory(component);
             categorizedComponents.get(category).add(component);
+
+            // NEW: Populate the registry with the FULL component data
+            componentRegistry.put(component.getId(), component);
+            if (component.getName() != null) {
+                // Also map simple name for easier lookup
+                componentRegistry.putIfAbsent(component.getName(), component);
+            }
         }
     }
 
     private String detectComponentCategory(CodeComponent component) {
         return ComponentCategorizer.detectCategory(component);
     }
-
 
     public void setViewMode(String viewMode) {
         this.currentViewMode = viewMode;
@@ -308,11 +351,9 @@ public class GraphManager {
     private void updateExpandedNodeChildren(GraphNode parentNode, String viewMode) {
         if (!parentNode.isExpanded()) return;
 
-        // Get children through a new method we'll add to GraphNode
         List<GraphNode> children = parentNode.getChildren();
 
         for (GraphNode child : children) {
-            // Use the shouldShowInViewMode method from GraphNode
             boolean shouldBeVisible = child.shouldShowInViewMode(child.getComponent(), viewMode);
 
             child.setVisible(shouldBeVisible);
@@ -327,12 +368,11 @@ public class GraphManager {
     public void expandNodeWithChildren(String componentId) {
         GraphNode node = nodeMap.get(componentId);
         if (node != null && !node.isExpanded()) {
-            node.expand(); // Use the expand method instead of toggle
-
-            // Recursively expand children if they meet certain criteria
-            expandChildNodesRecursively(node, 2); // Expand up to 2 levels deep
+            node.expand();
+            expandChildNodesRecursively(node, 2);
         }
     }
+
     private void expandChildNodesRecursively(GraphNode parentNode, int maxDepth) {
         if (maxDepth <= 0) return;
 
@@ -346,11 +386,9 @@ public class GraphManager {
 
     private boolean shouldAutoExpand(GraphNode node) {
         CodeComponent component = node.getComponent();
-        // Auto-expand nodes that have dependencies or are key components
         return (component.getDependencies() != null && !component.getDependencies().isEmpty()) ||
-                component.getType().equals("Activity") ||
-                component.getType().equals("Fragment") ||
-                component.getType().equals("ViewModel");
+                "Activity".equals(component.getType()) ||
+                "Fragment".equals(component.getType()) ||
+                "ViewModel".equals(component.getType());
     }
-
 }
