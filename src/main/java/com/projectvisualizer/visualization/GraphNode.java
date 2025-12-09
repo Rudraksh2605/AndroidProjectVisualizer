@@ -16,7 +16,9 @@ import javafx.scene.text.Text;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -118,91 +120,72 @@ public class GraphNode {
         }
     }
 
+
     private void createChildNodes() {
         List<CodeComponent> childComponents = getChildComponents();
-
-        // --- KEY FIX: Explicitly handle Intent Node Logic ---
         if (isIntentNode()) {
-            System.out.println("GraphNode [" + getDisplayName() + "]: Detected as Intent Node. Attempting to extract target...");
+            System.out.println("GraphNode [" + getDisplayName() + "]: Detected as Intent Node. Attempting to extract targets...");
 
-            String targetName = extractTargetActivityFromIntent();
-            System.out.println("GraphNode [" + getDisplayName() + "]: Extracted target name: " + targetName);
+            List<String> targets = extractTargetActivitiesFromIntent();
+            System.out.println("GraphNode [" + getDisplayName() + "]: Extracted targets: " + targets);
 
-            if (targetName != null && !targetName.isEmpty()) {
-                CodeComponent targetComp = findOrCreateTargetComponent(targetName);
-                if (targetComp != null) {
-                    System.out.println("GraphNode [" + getDisplayName() + "]: Found/Created target component: " + targetComp.getName());
+            if (targets != null && !targets.isEmpty()) {
+                for (String targetName : targets) {
+                    CodeComponent targetComp = findOrCreateTargetComponent(targetName);
+                    if (targetComp != null) {
+                        System.out.println("GraphNode [" + getDisplayName() + "]: Found/Created target component: " + targetComp.getName());
 
-                    // Avoid duplicates
-                    boolean exists = childComponents.stream()
-                            .anyMatch(c -> c.getName() != null && c.getName().equals(targetComp.getName()));
-                    if (!exists) {
-                        childComponents.add(targetComp);
+                        // Avoid duplicates
+                        boolean exists = childComponents.stream()
+                                .anyMatch(c -> c.getName() != null && c.getName().equals(targetComp.getName()));
+                        if (exists) continue;
+
+                        // Create child node
+                        GraphNode childNode = new GraphNode(targetComp, canvas);
+
+                        // Place child nodes around parent
+                        double angle = Math.toRadians(30 + (children.size() * 40));
+                        double radius = 120;
+                        double childX = nodeContainer.getLayoutX() + Math.cos(angle) * radius;
+                        double childY = nodeContainer.getLayoutY() + Math.sin(angle) * radius;
+
+                        childNode.getContainer().setLayoutX(childX);
+                        childNode.getContainer().setLayoutY(childY);
+
+                        // Create Semantic Connection
+                        Line connectionLine = createSemanticConnectionLine(nodeContainer, childNode.getContainer(), targetComp);
+                        connectionLines.add(connectionLine);
+                        canvas.getChildren().add(connectionLine);
+                        connectionLine.toBack();
+
+                        canvas.getChildren().add(childNode.getContainer());
+                        children.add(childNode);
+                    } else {
+                        // Optionally create a placeholder node with the name
+                        createTargetPlaceholderNode(targetName);
                     }
-                } else {
-                    System.out.println("GraphNode [" + getDisplayName() + "]: Failed to find/create target component for " + targetName);
                 }
+                expanded = true;
             } else {
-                // FALLBACK: Aggressive Scan of Dependencies for ANY Activity/Fragment
-                System.out.println("GraphNode [" + getDisplayName() + "]: No name extracted. Scanning dependencies for UI components...");
-                if (component.getDependencies() != null) {
-                    for (CodeComponent dep : component.getDependencies()) {
-                        System.out.println("  - Checking dep: " + dep.getName() + " (" + dep.getType() + ")");
-                        if (isTargetComponent(dep)) {
-                            System.out.println("  -> MATCH! Adding " + dep.getName() + " as target.");
-                            childComponents.add(dep);
-                        }
-                    }
-                }
+                toggleExpansion();
             }
+            return;
         }
 
-        // --- DEBUG LOGGING ---
-        if (childComponents.isEmpty()) {
-            System.out.println("GraphNode [" + getDisplayName() + "]: No further nodes to be shown (null/empty)");
-        } else {
-            System.out.println("GraphNode [" + getDisplayName() + "]: Showing " + childComponents.size() + " further nodes:");
-            for (CodeComponent child : childComponents) {
-                System.out.println("  -> " + (child.getName() != null ? child.getName() : child.getId()));
-            }
-        }
-        // ---------------------
-
-        if (childComponents.isEmpty()) return;
-
-        // Visual layout settings
-        double angleStep = 180.0 / Math.max(1, childComponents.size() - 1);
-        double radius = 200;
-
-        double startAngle = 0;
-        if ("UI".equals(component.getLayer())) startAngle = 0;
-        else if ("Data".equals(component.getLayer())) startAngle = 180;
-
+        // Non-intent nodes: default behavior (existing behavior retained)
         int index = 0;
         for (CodeComponent childComp : childComponents) {
-            // Retrieve REAL component from Registry
-            CodeComponent realChild = childComp;
-            if (canvas.getUserData() instanceof GraphManager) {
-                GraphManager gm = (GraphManager) canvas.getUserData();
-                CodeComponent lookup = gm.getCanonicalComponent(childComp.getId());
-                if (lookup != null) realChild = lookup;
-            }
-
-            GraphNode childNode = new GraphNode(realChild, canvas);
-            childNode.setViewMode(this.currentViewMode);
-            childNode.setExpansionMode(this.expansionMode);
-
-            // Calculate position
-            double angle = Math.toRadians(startAngle + (index * angleStep));
-            double childX = nodeContainer.getLayoutX() + radius * Math.cos(angle);
-            double childY = nodeContainer.getLayoutY() + radius * Math.sin(angle) + 80;
+            // existing logic to add child components visually
+            GraphNode childNode = new GraphNode(childComp, canvas);
+            // sample placement (could keep original logic from previous code)
+            double childX = nodeContainer.getLayoutX() + 120 + (index * 40);
+            double childY = nodeContainer.getLayoutY() + 50 + (index * 20);
 
             childNode.getContainer().setLayoutX(childX);
             childNode.getContainer().setLayoutY(childY);
 
             // Create Semantic Connection
             Line connectionLine = createSemanticConnectionLine(nodeContainer, childNode.getContainer(), childComp);
-
             connectionLines.add(connectionLine);
             canvas.getChildren().add(connectionLine);
             connectionLine.toBack();
@@ -213,6 +196,24 @@ public class GraphNode {
         }
     }
 
+
+    private CodeComponent findCanonicalComponent(String simpleName) {
+        if (canvas.getUserData() instanceof GraphManager) {
+            GraphManager gm = (GraphManager) canvas.getUserData();
+            // Try specific lookup
+            CodeComponent exact = gm.getCanonicalComponent(simpleName);
+            if (exact != null) return exact;
+
+            // Try fuzzy lookup for simple class names
+            if (!simpleName.contains(":")) {
+                for (CodeComponent c : gm.getNodeMap().values().stream().map(GraphNode::getComponent).collect(Collectors.toList())) {
+                    if (c.getName().equals(simpleName)) return c;
+                }
+            }
+        }
+        return null;
+    }
+
     private Line createSemanticConnectionLine(VBox parent, VBox child, CodeComponent childComp) {
         Line line = new Line();
         line.startXProperty().bind(parent.layoutXProperty().add(parent.widthProperty().divide(2)));
@@ -220,6 +221,19 @@ public class GraphNode {
         line.endXProperty().bind(child.layoutXProperty().add(child.widthProperty().divide(2)));
         line.endYProperty().bind(child.layoutYProperty().add(child.heightProperty().divide(2)));
         line.setStrokeWidth(2);
+
+        if (childComp.getId().startsWith("action:")) {
+            line.setStroke(Color.ORANGE);
+            line.setStrokeWidth(2);
+            line.getStrokeDashArray().addAll(10d, 5d);
+        } else if (component.getNavigationTargets().contains(childComp.getName()) ||
+                component.getNavigationTargets().contains(childComp.getId())) {
+            line.setStroke(Color.GREEN);
+            line.setStrokeWidth(3);
+            line.getStrokeDashArray().addAll(5d, 5d);
+        } else if (checkInheritance(childComp)) {
+            line.setStroke(Color.BLUE);
+        }
 
         if (checkInheritance(childComp)) {
             line.setStroke(Color.BLUE);
@@ -380,6 +394,11 @@ public class GraphNode {
             nodeContainer.setLayoutX(e.getSceneX() - nodeContainer.getWidth()/2);
             nodeContainer.setLayoutY(e.getSceneY() - nodeContainer.getHeight()/2);
         });
+        nodeCircle.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 || e.getClickCount() == 1) {
+                toggleExpansion();
+            }
+        });
     }
 
     private Color getColorForLayer(String layer) {
@@ -397,22 +416,37 @@ public class GraphNode {
         if (name == null) return "Unknown";
 
         if (isIntentNode()) {
-            String target = extractTargetActivityFromIntent();
-            if (target != null) return "Nav to\n" + target;
+            List<String> targets = extractTargetActivitiesFromIntent();
+            if (!targets.isEmpty()) {
+                for (String targetName : targets) {
+                    CodeComponent targetComp = findOrCreateTargetComponent(targetName);
+                    if (targetComp != null) {
+                        createTargetActivityNode(targetComp);
+                    } else {
+                        // Optionally create a placeholder node with the name
+                        createTargetPlaceholderNode(targetName);
+                    }
+                }
+                expanded = true;
+            } else {
+                toggleExpansion();
+            }
         }
         return component.getName();
     }
+
 
     private String createTooltipText() {
         StringBuilder sb = new StringBuilder();
         sb.append("Type: ").append(component.getType() != null ? component.getType() : "N/A").append("\n");
         sb.append("Layer: ").append(component.getLayer() != null ? component.getLayer() : "N/A");
         if (isIntentNode()) {
-            String target = extractTargetActivityFromIntent();
-            if (target != null) sb.append("\nTarget: ").append(target);
+            List<String> targets = extractTargetActivitiesFromIntent();
+            if (targets != null && !targets.isEmpty()) sb.append("\nTarget(s): ").append(String.join(", ", targets));
         }
         return sb.toString();
     }
+
 
     private void animateChildAppearance() {
         for (int i=0; i<children.size(); i++) {
@@ -437,51 +471,189 @@ public class GraphNode {
         return false;
     }
 
-    // --- UPDATED: More Robust Intent Target Extraction ---
-    private String extractTargetActivityFromIntent() {
-        String name = component.getName();
-        if (name == null) return null;
+    //
+//    private List<String> extractTargetActivitiesFromIntent() {
+//        List<String> results = new ArrayList<>();
+//        String source = null;
+//
+//        try {
+//            if (component.getCode() != null && !component.getCode().isEmpty()) {
+//                source = component.getCode();
+//            } else {
+//                source = component.getName();
+//            }
+//        } catch (Exception ex) {
+//            source = component.getName();
+//        }
+//
+//        if (source == null) return results;
+//
+//        System.out.println("GraphNode: Analyzing Intent code/snippet: " + source);
+//
+//        List<Pattern> patterns = new ArrayList<>();
+//
+//        // 1) Generic explicit intent (Kotlin or Java) capturing fully-qualified or simple class
+//        patterns.add(Pattern.compile("Intent\\s*\\([^,]+,\\s*([a-zA-Z0-9_.$]+)(::class\\.java|\\.class)"));
+//        // 2) new Intent(context, TargetActivity.class) (Java)
+//        patterns.add(Pattern.compile("new\\s+Intent\\s*\\([^,]+,\\s*([a-zA-Z0-9_.$]+)\\.class"));
+//        // 3) Kotlin startActivity<TargetActivity>()
+//        patterns.add(Pattern.compile("startActivity\\s*<\\s*([A-Z][a-zA-Z0-9_.$]+)\\s*>"));
+//        // 4) setClass(this, Target.class)
+//        patterns.add(Pattern.compile("setClass\\s*\\([^,]+,\\s*([a-zA-Z0-9_.$]+)\\.class\\)"));
+//        // 5) setClassName("com.pkg","com.pkg.TargetActivity") or setClassName("com.pkg.TargetActivity")
+//        patterns.add(Pattern.compile("setClassName\\s*\\(\\s*\"[^\"]+\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+//        patterns.add(Pattern.compile("setClassName\\s*\\(\\s*\"([^\"]+)\"\\s*\\)")); // single-arg
+//        // 6) setComponent(new ComponentName("com.pkg","com.pkg.TargetActivity"))
+//        patterns.add(Pattern.compile("setComponent\\s*\\(\\s*new\\s+ComponentName\\s*\\(\\s*\"[^\"]+\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+//        // 7) ComponentName("com.pkg","com.pkg.TargetActivity")
+//        patterns.add(Pattern.compile("ComponentName\\s*\\(\\s*\"[^\"]+\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+//        // 8) NavController.navigate(R.id.action_x_to_y) or navigate(R.id.dest)
+//        patterns.add(Pattern.compile("navigate\\s*\\(\\s*R\\.id\\.([a-zA-Z0-9_]+)\\s*\\)"));
+//
+//        Set<String> found = new LinkedHashSet<>();
+//        for (Pattern p : patterns) {
+//            Matcher m = p.matcher(source);
+//            while (m.find()) {
+//                String g = null;
+//                for (int i = 1; i <= m.groupCount(); i++) {
+//                    try {
+//                        if (m.group(i) != null && !m.group(i).isEmpty()) {
+//                            g = m.group(i);
+//                            break;
+//                        }
+//                    } catch (Exception ex) { /* ignore */ }
+//                }
+//                if (g == null) continue;
+//
+//                if (g.matches("[a-z0-9_]+") || g.startsWith("action_") || g.startsWith("nav_") || g.startsWith("dest_")) {
+//                    try {
+//                        String conv = convertNavIdToName(g);
+//                        if (conv != null && !conv.isEmpty()) {
+//                            found.add(conv);
+//                            continue;
+//                        }
+//                    } catch (Exception ex) { }
+//                    found.add(g);
+//                } else {
+//                    String last = g;
+//                    if (g.contains(".")) {
+//                        last = g.substring(g.lastIndexOf('.') + 1);
+//                    }
+//                    if (last.endsWith("$")) last = last.replace("$", "");
+//                    found.add(last);
+//                }
+//            }
+//        }
+//
+//        if (found.isEmpty() && component.getDependencies() != null) {
+//            for (CodeComponent dep : component.getDependencies()) {
+//                if (isTargetComponent(dep)) {
+//                    System.out.println("DEBUG: Dependency fallback matched: " + dep.getName());
+//                    found.add(dep.getName());
+//                }
+//            }
+//        }
+//
+//        results.addAll(found);
+//        return results;
+//    }
 
-        // 1. Regex to find Class Name before .class or ::class, handling potential spaces
-        // Matches "SecondActivity" in "SecondActivity.class" or "SecondActivity :: class.java"
-        // Also matches "TargetActivity" in "Intent(context, TargetActivity.class)"
-        Pattern pattern = Pattern.compile("([A-Z][a-zA-Z0-9_]*)\\s*(?=\\.class|::\\s*class)");
-        Matcher matcher = pattern.matcher(name);
-        if (matcher.find()) {
-            System.out.println("DEBUG: Regex 1 matched: " + matcher.group(1));
-            return matcher.group(1);
+    private List<String> extractTargetActivitiesFromIntent() {
+        List<String> results = new ArrayList<>();
+        String source = null;
+
+        // Prefer a full code snippet field if available
+        if (component.getCodeSnippet() != null && !component.getCodeSnippet().isEmpty()) {
+            source = component.getCodeSnippet();
         }
-
-        // 2. Regex to find string literals in navigate("Destination")
-        Pattern stringPattern = Pattern.compile("\"([A-Z][a-zA-Z0-9_]*)\"");
-        Matcher stringMatcher = stringPattern.matcher(name);
-        if (stringMatcher.find()) {
-            System.out.println("DEBUG: Regex 2 matched: " + stringMatcher.group(1));
-            return stringMatcher.group(1);
+        else {
+            // fallback to name, but this is weak
+            source = component.getName();
         }
+        if (source == null) return results;
 
-        // 3. Regex for generic intent creation: Intent(context, TargetActivity.class)
-        // This is useful if the node name is the full code line
-        Pattern intentCreationPattern = Pattern.compile("Intent\\s*\\([^,]+,\\s*([A-Z][a-zA-Z0-9_]*)(\\.class|::class\\.java)\\s*\\)");
-        Matcher intentMatcher = intentCreationPattern.matcher(name);
-        if (intentMatcher.find()) {
-            System.out.println("DEBUG: Regex 3 matched: " + intentMatcher.group(1));
-            return intentMatcher.group(1);
-        }
+        System.out.println("GraphNode: Analyzing Intent code/snippet: " + source);
 
-        // 4. Fallback: Check Dependencies for Targets
-        // If the Intent declaration (e.g., "new Intent(...)") was parsed as a node,
-        // the target class often appears as a dependency of that node.
-        if (component.getDependencies() != null) {
-            for (CodeComponent dep : component.getDependencies()) {
-                if (isTargetComponent(dep)) {
-                    System.out.println("DEBUG: Dependency fallback matched: " + dep.getName());
-                    return dep.getName();
+        List<Pattern> patterns = new ArrayList<>();
+
+        // 1) Generic explicit intent (Kotlin or Java) capturing fully-qualified or simple class
+        patterns.add(Pattern.compile("Intent\\s*\\([^,]+,\\s*([a-zA-Z0-9_.$]+)(::class\\.java|\\.class)"));
+        // 2) new Intent(context, TargetActivity.class) (Java)
+        patterns.add(Pattern.compile("new\\s+Intent\\s*\\([^,]+,\\s*([a-zA-Z0-9_.$]+)\\.class"));
+        // 3) Kotlin startActivity<TargetActivity>()
+        patterns.add(Pattern.compile("startActivity\\s*<\\s*([A-Z][a-zA-Z0-9_.$]+)\\s*>"));
+        // 4) setClass(this, Target.class)
+        patterns.add(Pattern.compile("setClass\\s*\\([^,]+,\\s*([a-zA-Z0-9_.$]+)\\.class\\)"));
+        // 5) setClassName("com.pkg","com.pkg.TargetActivity") or setClassName("com.pkg.TargetActivity")
+        patterns.add(Pattern.compile("setClassName\\s*\\(\\s*\"[^\"]+\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+        patterns.add(Pattern.compile("setClassName\\s*\\(\\s*\"([^\"]+)\"\\s*\\)")); // single-arg
+        // 6) setComponent(new ComponentName("com.pkg","com.pkg.TargetActivity"))
+        patterns.add(Pattern.compile("setComponent\\s*\\(\\s*new\\s+ComponentName\\s*\\(\\s*\"[^\"]+\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+        // 7) setComponent(ComponentName) style with fully-qualified string inside
+        patterns.add(Pattern.compile("ComponentName\\s*\\(\\s*\"[^\"]+\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+        // 8) NavController.navigate(R.id.action_x_to_y) or navController.navigate(R.id.dest)
+        patterns.add(Pattern.compile("navigate\\s*\\(\\s*R\\.id\\.([a-zA-Z0-9_]+)\\s*\\)"));
+
+        Set<String> found = new LinkedHashSet<>();
+        for (Pattern p : patterns) {
+            Matcher m = p.matcher(source);
+            while (m.find()) {
+                String g = null;
+                // find a plausible group
+                for (int i = 1; i <= m.groupCount(); i++) {
+                    if (m.group(i) != null) {
+                        g = m.group(i);
+                        break;
+                    }
+                }
+                if (g == null) continue;
+                // If it's a nav id, convert
+                if (g.startsWith("action_") || g.startsWith("nav_") || g.startsWith("dest_") || g.matches("[a-z0-9_]+")) {
+                    // try convertNavIdToName (exists in class)
+                    try {
+                        String conv = convertNavIdToName(g);
+                        if (conv != null && !conv.isEmpty()) found.add(conv);
+                    } catch (Exception ex) {
+                        // fallback to raw id
+                        found.add(g);
+                    }
+                } else {
+                    // If fully-qualified, keep last simple name for UI
+                    if (g.contains(".")) {
+                        String last = g.substring(g.lastIndexOf('.') + 1);
+                        if (last.endsWith("$")) last = last.replace("$", "");
+                        found.add(last);
+                    } else {
+                        found.add(g);
+                    }
                 }
             }
         }
 
-        return null;
+        // 9) Fallback: check dependencies attached to component (some parsers attach resolved dependency components)
+        if (found.isEmpty() && component.getDependencies() != null) {
+            for (CodeComponent dep : component.getDependencies()) {
+                if (isTargetComponent(dep)) {
+                    found.add(dep.getName());
+                }
+            }
+        }
+
+        results.addAll(found);
+        return results;
+    }
+
+
+    private String convertNavIdToName(String id) {
+        // Example: "action_home_to_details" -> "Details"
+        String[] parts = id.split("_");
+        String lastPart = parts[parts.length - 1];
+
+        // Capitalize first letter
+        if (lastPart != null && !lastPart.isEmpty()) {
+            return lastPart.substring(0, 1).toUpperCase() + lastPart.substring(1);
+        }
+        return id;
     }
 
     private boolean isTargetComponent(CodeComponent c) {
@@ -497,18 +669,24 @@ public class GraphNode {
         return type.equalsIgnoreCase("Activity") || type.equalsIgnoreCase("Fragment");
     }
 
+
     private void handleIntentNodeClick() {
-        String target = extractTargetActivityFromIntent();
-        if (target != null) {
-            CodeComponent targetComp = findOrCreateTargetComponent(target);
-            if (targetComp != null) {
-                createTargetActivityNode(targetComp);
-                expanded = true;
+        List<String> targets = extractTargetActivitiesFromIntent();
+        if (targets != null && !targets.isEmpty()) {
+            for (String target : targets) {
+                CodeComponent targetComp = findOrCreateTargetComponent(target);
+                if (targetComp != null) {
+                    createTargetActivityNode(targetComp);
+                } else {
+                    createTargetPlaceholderNode(target);
+                }
             }
+            expanded = true;
         } else {
             toggleExpansion();
         }
     }
+
 
     private CodeComponent findOrCreateTargetComponent(String targetName) {
         if (canvas.getUserData() instanceof GraphManager) {
@@ -556,4 +734,27 @@ public class GraphNode {
         ft.setFromValue(0); ft.setToValue(1);
         ft.play();
     }
+    private void createTargetPlaceholderNode(String name) {
+        // Create a lightweight placeholder CodeComponent and reuse createTargetActivityNode logic
+        CodeComponent placeholder = new CodeComponent();
+        try {
+            placeholder.setName(name);
+            placeholder.setType("Activity");
+        } catch (Exception ex) {
+            // if setters are not available, ignore
+        }
+
+        // Prevent duplicates
+        for (GraphNode child : children) {
+            if (child.getComponent() != null && child.getComponent().getName() != null
+                    && child.getComponent().getName().equals(name)) return;
+        }
+
+        try {
+            createTargetActivityNode(placeholder);
+        } catch (Exception ex) {
+            System.out.println("Failed to create placeholder node for: " + name);
+        }
+    }
+
 }

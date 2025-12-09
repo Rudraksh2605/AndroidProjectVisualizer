@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class KotlinParser {
@@ -52,6 +53,9 @@ public class KotlinParser {
             System.err.println("Error reading file: " + file.getName() + " - " + e.getMessage());
             return components;
         }
+
+        // Analyze navigation flows first
+        List<NavigationFlow> intentFlows = intentAnalyzer.analyzeIntentFlows(file);
 
         Disposable disposable = Disposer.newDisposable();
         try {
@@ -220,8 +224,33 @@ public class KotlinParser {
                 }
             }
 
-            // Analyze navigation flows (skip for Kotlin files to avoid JavaParser errors)
-            // List<NavigationFlow> intentFlows = intentAnalyzer.analyzeIntentFlows(file);
+            // --- NEW: Attach analyzed Intent Flows as formal CodeComponents ---
+            for (CodeComponent component : components) {
+                if (intentFlows != null && !intentFlows.isEmpty()) {
+                    for (NavigationFlow flow : intentFlows) {
+                        // Match flow source to current component name
+                        // We use a lenient match since sourceScreenId might be simple name or qualified
+                        if (component.getName().equals(flow.getSourceScreenId()) ||
+                                (component.getId() != null && component.getId().endsWith("." + flow.getSourceScreenId()))) {
+
+                            CodeComponent intentComp = new CodeComponent();
+                            intentComp.setId(UUID.randomUUID().toString());
+                            intentComp.setName("Intent to " + flow.getTargetScreenId()); // Descriptive name
+                            intentComp.setType("Intent");
+                            intentComp.setLayer("UI");
+
+                            // Add target as explicit dependency for robustness
+                            CodeComponent targetDep = new CodeComponent();
+                            targetDep.setId("dep_" + flow.getTargetScreenId());
+                            targetDep.setName(flow.getTargetScreenId());
+                            targetDep.setType("Activity");
+                            intentComp.addDependency(targetDep);
+
+                            component.addIntent(intentComp);
+                        }
+                    }
+                }
+            }
 
         } catch (Exception e) {
             System.err.println("Error parsing Kotlin file " + file.getName() + ": " + e.getMessage());

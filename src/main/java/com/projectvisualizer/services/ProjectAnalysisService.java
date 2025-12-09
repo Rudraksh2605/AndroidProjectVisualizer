@@ -14,21 +14,23 @@ public class ProjectAnalysisService {
     private XmlParser xmlParser;
     private AndroidManifestParser manifestParser;
     private Map<String, String> activityLayoutMap;
+    private UniversalNavigationParser navigationParser;
 
 
     public ProjectAnalysisService() {
         this.xmlParser = new XmlParser();
         this.manifestParser = new AndroidManifestParser();
+        this.navigationParser = new UniversalNavigationParser();
     }
 
     public AnalysisResult analyzeProject(File projectDir) {
         AnalysisResult result = new AnalysisResult();
+        List<CodeComponent> allComponents = new ArrayList<>();
 
         try {
             activityLayoutMap = parseAndroidManifest(projectDir);
             this.javaParser = new JavaFileParser(activityLayoutMap);
             this.kotlinParser = new KotlinParser(activityLayoutMap);
-            List<CodeComponent> allComponents = new ArrayList<>();
             scanAndParseDirectory(projectDir, allComponents);
 
             // OPTIMIZED: O(N) dependency resolution
@@ -48,6 +50,16 @@ public class ProjectAnalysisService {
             result.setError(e.getMessage());
             e.printStackTrace();
         }
+
+        scanAndParseDirectory(projectDir, allComponents);
+
+        for (CodeComponent comp : allComponents) {
+            if (comp.getFilePath() != null) {
+                navigationParser.extractNavigation(new File(comp.getFilePath()), comp);
+            }
+        }
+
+        resolveDependencies(allComponents);
 
         return result;
     }

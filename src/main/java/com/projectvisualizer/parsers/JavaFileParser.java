@@ -16,6 +16,7 @@ import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class JavaFileParser {
 
@@ -83,6 +84,34 @@ public class JavaFileParser {
                     }
                 }
             });
+
+            // --- NEW: Attach analyzed Intent Flows as formal CodeComponents ---
+            for (CodeComponent component : components) {
+                if (intentFlows != null && !intentFlows.isEmpty()) {
+                    for (NavigationFlow flow : intentFlows) {
+                        // Match flow source to current component name
+                        // We use a lenient match since sourceScreenId might be simple name or qualified
+                        if (component.getName().equals(flow.getSourceScreenId()) ||
+                                (component.getId() != null && component.getId().endsWith("." + flow.getSourceScreenId()))) {
+
+                            CodeComponent intentComp = new CodeComponent();
+                            intentComp.setId(UUID.randomUUID().toString());
+                            intentComp.setName("Intent to " + flow.getTargetScreenId()); // Descriptive name
+                            intentComp.setType("Intent");
+                            intentComp.setLayer("UI");
+
+                            // Add target as explicit dependency for robustness
+                            CodeComponent targetDep = new CodeComponent();
+                            targetDep.setId("dep_" + flow.getTargetScreenId());
+                            targetDep.setName(flow.getTargetScreenId());
+                            targetDep.setType("Activity");
+                            intentComp.addDependency(targetDep);
+
+                            component.addIntent(intentComp);
+                        }
+                    }
+                }
+            }
 
         }
 

@@ -22,6 +22,9 @@ public class CodeComponent {
     private List<String> layoutFiles;
     private List<NavigationDestination> navigationDestinations;
     private String fileExtension;
+    private String codeSnippet;
+
+
 
     // New unified schema fields
     private String packageName;
@@ -42,6 +45,8 @@ public class CodeComponent {
     private List<String> apiClients; // Retrofit/Ktor indicators
     private List<String> dbEntities; // Room entities detected on this type
     private List<String> dbDaos; // Room DAOs implemented/used
+
+    private List<String> navigationTargets;
 
     // Dagger/Hilt specific fields
     private boolean hasDaggerInjection;
@@ -68,6 +73,16 @@ public class CodeComponent {
         this.apiClients = new ArrayList<>();
         this.dbEntities = new ArrayList<>();
         this.dbDaos = new ArrayList<>();
+        this.navigationTargets = new ArrayList<>();
+    }
+
+    public List<String> getNavigationTargets() { return navigationTargets; }
+    public void setNavigationTargets(List<String> navigationTargets) { this.navigationTargets = navigationTargets; }
+
+    public void addNavigationTarget(String targetId) {
+        if (!this.navigationTargets.contains(targetId)) {
+            this.navigationTargets.add(targetId);
+        }
     }
 
     // Getters and Setters
@@ -91,6 +106,14 @@ public class CodeComponent {
 
     public String getExtendsClass() { return extendsClass; }
     public void setExtendsClass(String extendsClass) { this.extendsClass = extendsClass; }
+
+    public String getCodeSnippet() {
+        return codeSnippet;
+    }
+
+    public void setCodeSnippet(String codeSnippet) {
+        this.codeSnippet = codeSnippet;
+    }
 
     public List<String> getImplementsList() { return implementsList; }
     public void setImplementsList(List<String> implementsList) { this.implementsList = implementsList; }
@@ -192,7 +215,6 @@ public class CodeComponent {
     public List<String> getDbDaos() { return dbDaos; }
     public void setDbDaos(List<String> dbDaos) { this.dbDaos = dbDaos; }
 
-    // Helper methods
     public void addLayoutFile(String layoutFile) {
         this.layoutFiles.add(layoutFile);
     }
