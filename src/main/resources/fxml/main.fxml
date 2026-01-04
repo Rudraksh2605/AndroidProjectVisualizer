@@ -325,8 +325,10 @@
                             <Region HBox.hgrow="ALWAYS"/>
                             <Button text="Export Code" onAction="#handleExportToPlantUML"/>
                         </HBox>
-                        <ScrollPane VBox.vgrow="ALWAYS">
-                            <ImageView fx:id="plantUMLImageView" fitWidth="800" preserveRatio="true" />
+                        <ScrollPane VBox.vgrow="ALWAYS" pannable="true" fitToHeight="false" fitToWidth="false">
+                            <StackPane>
+                                <ImageView fx:id="plantUMLImageView" />
+                            </StackPane>
                         </ScrollPane>
                     </VBox>
                 </Tab>
@@ -341,8 +343,10 @@
                             <Region HBox.hgrow="ALWAYS"/>
                             <Button text="Export Code" onAction="#handleExportToGraphviz"/>
                         </HBox>
-                        <ScrollPane VBox.vgrow="ALWAYS">
-                            <ImageView fx:id="graphvizImageView" fitWidth="800" preserveRatio="true" />
+                        <ScrollPane VBox.vgrow="ALWAYS" pannable="true" fitToHeight="false" fitToWidth="false">
+                            <StackPane>
+                                <ImageView fx:id="graphvizImageView" />
+                            </StackPane>
                         </ScrollPane>
                     </VBox>
                 </Tab>

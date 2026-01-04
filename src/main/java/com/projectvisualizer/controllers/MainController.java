@@ -76,6 +76,7 @@ public class MainController implements Initializable {
     private double currentZoom = 1.0;
     private double plantUmlZoom = 1.0;
     private double graphvizZoom = 1.0;
+    private String diagramViewMode = "ALL"; // used to filter diagram outputs
     private AnalysisResult currentAnalysisResult;
 
     @Override
@@ -540,10 +541,14 @@ public class MainController implements Initializable {
     }
 
     private void applyPlantUmlZoom() {
-        if (plantUMLImageView != null) {
-            plantUMLImageView.setScaleX(plantUmlZoom);
-            plantUMLImageView.setScaleY(plantUmlZoom);
-        }
+        if (plantUMLImageView == null) return;
+        Image img = plantUMLImageView.getImage();
+        if (img == null) return;
+        double baseW = img.getWidth();
+        double baseH = img.getHeight();
+        if (baseW <= 0 || baseH <= 0) return;
+        plantUMLImageView.setFitWidth(baseW * plantUmlZoom);
+        plantUMLImageView.setFitHeight(baseH * plantUmlZoom);
     }
 
     @FXML
@@ -573,10 +578,14 @@ public class MainController implements Initializable {
     }
 
     private void applyGraphvizZoom() {
-        if (graphvizImageView != null) {
-            graphvizImageView.setScaleX(graphvizZoom);
-            graphvizImageView.setScaleY(graphvizZoom);
-        }
+        if (graphvizImageView == null) return;
+        Image img = graphvizImageView.getImage();
+        if (img == null) return;
+        double baseW = img.getWidth();
+        double baseH = img.getHeight();
+        if (baseW <= 0 || baseH <= 0) return;
+        graphvizImageView.setFitWidth(baseW * graphvizZoom);
+        graphvizImageView.setFitHeight(baseH * graphvizZoom);
     }
 
     @FXML
@@ -937,6 +946,11 @@ public class MainController implements Initializable {
             graphManager.setViewModeForExpandedNodes(mode);
             updateCategoryStats();
             statusLabel.setText("View mode: " + getViewModeDisplayName(mode) + " - applied to expanded nodes");
+            // Also update diagram filtering mode and regenerate diagrams
+            this.diagramViewMode = mode;
+            if (currentAnalysisResult != null) {
+                updateDiagrams(currentAnalysisResult);
+            }
         }
     }
 
@@ -1074,9 +1088,9 @@ public class MainController implements Initializable {
         sb.append("@startuml\n");
         // Layout improvements for wide screens and cleaner lines
         sb.append("left to right direction\n");
-        sb.append("skinparam linetype ortho\n");
-        sb.append("skinparam nodesep 80\n");
-        sb.append("skinparam ranksep 80\n");
+        sb.append("skinparam linetype polyline\n");
+        sb.append("skinparam nodesep 60\n");
+        sb.append("skinparam ranksep 100\n");
         sb.append("scale max 4096 width\n");
         sb.append("skinparam backgroundColor #ffffff\n");
         sb.append("skinparam class {\n");
@@ -1087,8 +1101,28 @@ public class MainController implements Initializable {
         sb.append("  BackgroundColor<<Unknown>> #f2f2f2\n");
         sb.append("}\n\n");
 
-        // Group by category using enhanced detection
-        Map<String, List<CodeComponent>> byCategory = components.stream()
+        // 1) Filter by current diagram view mode
+        List<CodeComponent> filtered = components.stream().filter(c -> {
+            if (diagramViewMode == null || "ALL".equalsIgnoreCase(diagramViewMode)) return true;
+            String cat = detectComponentCategoryForDiagrams(c);
+            switch (diagramViewMode) {
+                case "UI": return "UI".equals(cat);
+                case "DATA_MODEL": return "DataModel".equals(cat);
+                case "BUSINESS_LOGIC": return "BusinessLogic".equals(cat);
+                case "NAVIGATION": return "Navigation".equals(cat);
+                default: return true;
+            }
+        }).collect(Collectors.toList());
+
+        // Precompute included IDs for relationship filtering
+        Set<String> includedIds = filtered.stream()
+                .map(CodeComponent::getId)
+                .filter(Objects::nonNull)
+                .map(this::sanitizeId)
+                .collect(Collectors.toSet());
+
+        // 2) Group by category using enhanced detection (on filtered set)
+        Map<String, List<CodeComponent>> byCategory = filtered.stream()
                 .collect(Collectors.groupingBy(this::detectComponentCategoryForDiagrams));
 
         for (Map.Entry<String, List<CodeComponent>> entry : byCategory.entrySet()) {
@@ -1098,21 +1132,22 @@ public class MainController implements Initializable {
             sb.append("' ").append(category).append(" Components\n");
             for (CodeComponent component : categoryComponents) {
                 String name = component.getName() != null ? component.getName() : "Unknown";
-                String type = component.getType() != null ? component.getType() : "Component";
-                sb.append("class \"").append(name).append("\" as ").append(sanitizeId(component.getId()))
+                sb.append("class \"").append(name).append("\" as ")
+                        .append(sanitizeId(component.getId()))
                         .append(" <<").append(category).append(">>\n");
             }
             sb.append("\n");
         }
 
-        // Add relationships
+        // 3) Add relationships only when both ends are present in filtered set
         sb.append("' Dependencies\n");
-        for (CodeComponent component : components) {
+        for (CodeComponent component : filtered) {
             if (component.getDependencies() != null) {
                 String fromId = sanitizeId(component.getId());
+                if (!includedIds.contains(fromId)) continue; // should be present anyway
                 for (CodeComponent dep : component.getDependencies()) {
                     String toId = sanitizeId(dep.getId());
-                    if (!fromId.equals(toId)) {
+                    if (!fromId.equals(toId) && includedIds.contains(toId)) {
                         sb.append(fromId).append(" --> ").append(toId).append("\n");
                     }
                 }
