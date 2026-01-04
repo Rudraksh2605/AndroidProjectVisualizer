@@ -91,6 +91,68 @@ public class GraphLayoutManager {
         }
     }
 
+    /**
+     * Physics-based post-processing to reduce node overlaps using simple repulsion.
+     * Runs a small simulation loop and nudges nodes apart when they are too close.
+     */
+    public void resolveOverlaps(Collection<GraphNode> nodes) {
+        if (nodes == null || nodes.size() < 2) return;
+
+        List<GraphNode> list = new ArrayList<>(nodes);
+        final int iterations = 50;
+        final double minDistance = 250.0; // threshold distance between node centers per spec
+
+        for (int it = 0; it < iterations; it++) {
+            boolean anyMoved = false;
+
+            for (int i = 0; i < list.size(); i++) {
+                GraphNode a = list.get(i);
+                double ax = a.getContainer().getLayoutX();
+                double ay = a.getContainer().getLayoutY();
+
+                for (int j = i + 1; j < list.size(); j++) {
+                    GraphNode b = list.get(j);
+                    double bx = b.getContainer().getLayoutX();
+                    double by = b.getContainer().getLayoutY();
+
+                    double dx = ax - bx;
+                    double dy = ay - by;
+                    double dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 1e-3) {
+                        // Prevent divide-by-zero by adding a tiny random jitter
+                        dx = (Math.random() - 0.5);
+                        dy = (Math.random() - 0.5);
+                        dist = Math.sqrt(dx * dx + dy * dy);
+                    }
+
+                    if (dist < minDistance) {
+                        // Push both nodes away from each other equally
+                        double overlap = (minDistance - dist) / 2.0; // split the correction
+                        double ux = dx / dist;
+                        double uy = dy / dist;
+
+                        double moveX = ux * overlap;
+                        double moveY = uy * overlap;
+
+                        a.getContainer().setLayoutX(ax + moveX);
+                        a.getContainer().setLayoutY(ay + moveY);
+                        b.getContainer().setLayoutX(bx - moveX);
+                        b.getContainer().setLayoutY(by - moveY);
+
+                        // Update a's coordinates for subsequent comparisons in this loop
+                        ax += moveX;
+                        ay += moveY;
+
+                        anyMoved = true;
+                    }
+                }
+            }
+
+            if (!anyMoved) break; // Early exit if stabilized
+        }
+    }
+
     private boolean isUILayer(String layer) {
         return layer != null && (layer.equalsIgnoreCase("UI") || layer.contains("Presentation"));
     }

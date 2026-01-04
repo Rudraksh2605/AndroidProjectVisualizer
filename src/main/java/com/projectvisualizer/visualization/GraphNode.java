@@ -123,68 +123,74 @@ public class GraphNode {
 
     private void createChildNodes() {
         List<CodeComponent> childComponents = getChildComponents();
+
         if (isIntentNode()) {
-            System.out.println("GraphNode [" + getDisplayName() + "]: Detected as Intent Node. Attempting to extract targets...");
-
+            // Intent node: build a list of target components, then place radially
             List<String> targets = extractTargetActivitiesFromIntent();
-            System.out.println("GraphNode [" + getDisplayName() + "]: Extracted targets: " + targets);
+            if (targets == null || targets.isEmpty()) { toggleExpansion(); return; }
 
-            if (targets != null && !targets.isEmpty()) {
-                for (String targetName : targets) {
-                    CodeComponent targetComp = findOrCreateTargetComponent(targetName);
-                    if (targetComp != null) {
-                        System.out.println("GraphNode [" + getDisplayName() + "]: Found/Created target component: " + targetComp.getName());
-
-                        // Avoid duplicates
-                        boolean exists = childComponents.stream()
-                                .anyMatch(c -> c.getName() != null && c.getName().equals(targetComp.getName()));
-                        if (exists) continue;
-
-                        // Create child node
-                        GraphNode childNode = new GraphNode(targetComp, canvas);
-
-                        // Place child nodes around parent
-                        double angle = Math.toRadians(30 + (children.size() * 40));
-                        double radius = 120;
-                        double childX = nodeContainer.getLayoutX() + Math.cos(angle) * radius;
-                        double childY = nodeContainer.getLayoutY() + Math.sin(angle) * radius;
-
-                        childNode.getContainer().setLayoutX(childX);
-                        childNode.getContainer().setLayoutY(childY);
-
-                        // Create Semantic Connection
-                        Line connectionLine = createSemanticConnectionLine(nodeContainer, childNode.getContainer(), targetComp);
-                        connectionLines.add(connectionLine);
-                        canvas.getChildren().add(connectionLine);
-                        connectionLine.toBack();
-
-                        canvas.getChildren().add(childNode.getContainer());
-                        children.add(childNode);
-                    } else {
-                        // Optionally create a placeholder node with the name
-                        createTargetPlaceholderNode(targetName);
-                    }
+            List<CodeComponent> toRender = new ArrayList<>();
+            for (String targetName : targets) {
+                CodeComponent targetComp = findOrCreateTargetComponent(targetName);
+                if (targetComp == null) {
+                    // Build a placeholder if necessary
+                    CodeComponent placeholder = new CodeComponent();
+                    placeholder.setId(targetName);
+                    placeholder.setName(targetName);
+                    placeholder.setType("Activity");
+                    placeholder.setLayer("UI");
+                    targetComp = placeholder;
                 }
-                expanded = true;
-            } else {
-                toggleExpansion();
+                final String nameToCheck = targetComp.getName();
+                boolean exists = childComponents.stream()
+                        .anyMatch(c -> c.getName() != null && c.getName().equals(nameToCheck));
+                if (!exists) toRender.add(targetComp);
             }
+
+            int n = toRender.size();
+            if (n == 0) { expanded = true; triggerGlobalLayoutRefresh(); return; }
+            double radius = 200 + n * 20;
+
+            for (int i = 0; i < n; i++) {
+                CodeComponent cc = toRender.get(i);
+                GraphNode childNode = new GraphNode(cc, canvas);
+
+                double angle = (2 * Math.PI * i) / Math.max(n, 1);
+                double childX = nodeContainer.getLayoutX() + Math.cos(angle) * radius;
+                double childY = nodeContainer.getLayoutY() + Math.sin(angle) * radius;
+
+                childNode.getContainer().setLayoutX(childX);
+                childNode.getContainer().setLayoutY(childY);
+
+                Line connectionLine = createSemanticConnectionLine(nodeContainer, childNode.getContainer(), cc);
+                connectionLines.add(connectionLine);
+                canvas.getChildren().add(connectionLine);
+                connectionLine.toBack();
+
+                canvas.getChildren().add(childNode.getContainer());
+                children.add(childNode);
+            }
+            expanded = true;
+            triggerGlobalLayoutRefresh();
             return;
         }
 
-        // Non-intent nodes: default behavior (existing behavior retained)
-        int index = 0;
-        for (CodeComponent childComp : childComponents) {
-            // existing logic to add child components visually
+        // Non-intent nodes: radial layout of children
+        int n = childComponents.size();
+        if (n == 0) return;
+        double radius = 200 + n * 20;
+
+        for (int i = 0; i < n; i++) {
+            CodeComponent childComp = childComponents.get(i);
             GraphNode childNode = new GraphNode(childComp, canvas);
-            // sample placement (could keep original logic from previous code)
-            double childX = nodeContainer.getLayoutX() + 120 + (index * 40);
-            double childY = nodeContainer.getLayoutY() + 50 + (index * 20);
+
+            double angle = (2 * Math.PI * i) / n;
+            double childX = nodeContainer.getLayoutX() + Math.cos(angle) * radius;
+            double childY = nodeContainer.getLayoutY() + Math.sin(angle) * radius;
 
             childNode.getContainer().setLayoutX(childX);
             childNode.getContainer().setLayoutY(childY);
 
-            // Create Semantic Connection
             Line connectionLine = createSemanticConnectionLine(nodeContainer, childNode.getContainer(), childComp);
             connectionLines.add(connectionLine);
             canvas.getChildren().add(connectionLine);
@@ -192,7 +198,15 @@ public class GraphNode {
 
             canvas.getChildren().add(childNode.getContainer());
             children.add(childNode);
-            index++;
+        }
+
+        triggerGlobalLayoutRefresh();
+    }
+
+    private void triggerGlobalLayoutRefresh() {
+        if (canvas.getUserData() instanceof GraphManager) {
+            GraphManager gm = (GraphManager) canvas.getUserData();
+            gm.refreshLayout();
         }
     }
 
@@ -380,6 +394,11 @@ public class GraphNode {
     public CodeComponent getComponent() { return component; }
     public void setViewMode(String mode) { this.currentViewMode = mode; }
     public void setExpansionMode(ExpansionMode mode) { this.expansionMode = mode; }
+
+    // Expose children for layout purposes (read-only copy)
+    public List<GraphNode> getChildrenNodes() {
+        return new ArrayList<>(children);
+    }
 
     private void setupEventHandlers() {
         nodeCircle.setOnMouseClicked(e -> {

@@ -165,4 +165,14 @@ public class GraphManager {
             }
         }
     }
+
+    /**
+     * Public hook to re-run overlap resolution across all currently visible nodes.
+     * Invoked by nodes after dynamic expansion.
+     */
+    public void refreshLayout() {
+        if (layoutManager != null && nodeMap != null && !nodeMap.isEmpty()) {
+            layoutManager.resolveOverlaps(nodeMap.values());
+        }
+    }
 }

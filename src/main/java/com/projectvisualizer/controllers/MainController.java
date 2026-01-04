@@ -432,11 +432,11 @@ public class MainController implements Initializable {
             statusLabel.setText("Rendered PlantUML diagram");
 
             if (showOnCanvas && graphCanvas != null) {
-                // Clear canvas and show image centered
+                // Clear canvas and show image, fit to canvas width (responsive)
                 graphCanvas.getChildren().clear();
                 ImageView iv = new ImageView(fxImage);
                 iv.setPreserveRatio(true);
-                iv.setFitWidth(Math.min(1200, fxImage.getWidth()));
+                iv.fitWidthProperty().bind(graphCanvas.widthProperty());
                 graphCanvas.getChildren().add(iv);
             }
         } catch (Exception e) {
@@ -510,7 +510,7 @@ public class MainController implements Initializable {
                 graphCanvas.getChildren().clear();
                 ImageView iv = new ImageView(fxImage);
                 iv.setPreserveRatio(true);
-                iv.setFitWidth(Math.min(1200, fxImage.getWidth()));
+                iv.fitWidthProperty().bind(graphCanvas.widthProperty());
                 graphCanvas.getChildren().add(iv);
             }
         } catch (Exception e) {
@@ -702,7 +702,14 @@ public class MainController implements Initializable {
     }
 
     private void updateProjectTreeWithRealData(List<CodeComponent> components) {
-        TreeItem<String> rootItem = new TreeItem<>("Project Structure");
+        // Ensure we clear any previous items to prevent duplicates on re-parse
+        TreeItem<String> rootItem = projectTreeView.getRoot();
+        if (rootItem == null) {
+            rootItem = new TreeItem<>("Project Structure");
+        } else {
+            // Crucial: clear existing children before repopulating
+            rootItem.getChildren().clear();
+        }
         rootItem.setExpanded(true);
 
         // Group by file extensions as requested
@@ -710,10 +717,31 @@ public class MainController implements Initializable {
         TreeItem<String> kotlinGroup = new TreeItem<>("Kotlin Files (.kt)");
         TreeItem<String> xmlGroup = new TreeItem<>("XML Files (.xml)");
 
+        // Gatekeeper set to avoid adding the same file/component twice
+        Set<String> addedKeys = new LinkedHashSet<>();
+
         for (CodeComponent component : components) {
             if (component == null) continue;
             String filePath = component.getFilePath();
             String language = component.getLanguage();
+
+            // Build a stable key: prefer file path, then component id, then name+language
+            String key;
+            if (filePath != null && !filePath.isEmpty()) {
+                key = filePath;
+            } else if (component.getId() != null && !component.getId().isEmpty()) {
+                key = "id:" + component.getId();
+            } else {
+                String base = component.getName() != null ? component.getName() : "Unknown";
+                String lang = language != null ? language.toLowerCase() : "";
+                key = "name:" + base + "|lang:" + lang;
+            }
+
+            // Skip duplicates
+            if (!addedKeys.add(key)) {
+                continue;
+            }
+
             String fileName = null;
             if (filePath != null) {
                 File f = new File(filePath);
@@ -726,6 +754,8 @@ public class MainController implements Initializable {
                     fileName = base + ".kt";
                 } else if (language != null && language.toLowerCase().startsWith("java")) {
                     fileName = base + ".java";
+                } else if (filePath != null && !filePath.isEmpty()) {
+                    fileName = new File(filePath).getName();
                 } else {
                     // default unknown extension
                     fileName = base;
@@ -1042,6 +1072,12 @@ public class MainController implements Initializable {
     private String buildCategorizedPlantUml(List<CodeComponent> components) {
         StringBuilder sb = new StringBuilder();
         sb.append("@startuml\n");
+        // Layout improvements for wide screens and cleaner lines
+        sb.append("left to right direction\n");
+        sb.append("skinparam linetype ortho\n");
+        sb.append("skinparam nodesep 80\n");
+        sb.append("skinparam ranksep 80\n");
+        sb.append("scale max 4096 width\n");
         sb.append("skinparam backgroundColor #ffffff\n");
         sb.append("skinparam class {\n");
         sb.append("  BackgroundColor<<UI>> #e0f2fe\n");
@@ -1091,7 +1127,7 @@ public class MainController implements Initializable {
         StringBuilder sb = new StringBuilder();
         sb.append("digraph G {\n");
         sb.append("  rankdir=LR;\n");
-        sb.append("  graph [bgcolor=white];\n");
+        sb.append("  graph [bgcolor=white, splines=ortho, nodesep=1.0, ranksep=2.0];\n");
         sb.append("  node [shape=box, style=filled, fontname=Helvetica];\n\n");
 
         Map<String, List<CodeComponent>> byCategory = components.stream()
