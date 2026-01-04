@@ -383,21 +383,22 @@ public class GraphNode {
 
     private void setupEventHandlers() {
         nodeCircle.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 1 && isIntentNode()) {
-                handleIntentNodeClick();
-            } else if (e.getClickCount() == 2) {
-                toggleExpansion();
+            if (isIntentNode()) {
+                // Intent node: lazy-load expansion on single click
+                if (e.getClickCount() == 1) {
+                    handleIntentNodeClick();
+                }
+            } else {
+                // Other nodes: expand/collapse on double-click
+                if (e.getClickCount() == 2) {
+                    toggleExpansion();
+                }
             }
         });
         nodeContainer.setOnMousePressed(e -> nodeContainer.toFront());
         nodeContainer.setOnMouseDragged(e -> {
             nodeContainer.setLayoutX(e.getSceneX() - nodeContainer.getWidth()/2);
             nodeContainer.setLayoutY(e.getSceneY() - nodeContainer.getHeight()/2);
-        });
-        nodeCircle.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2 || e.getClickCount() == 1) {
-                toggleExpansion();
-            }
         });
     }
 
@@ -415,23 +416,7 @@ public class GraphNode {
         String name = component.getName();
         if (name == null) return "Unknown";
 
-        if (isIntentNode()) {
-            List<String> targets = extractTargetActivitiesFromIntent();
-            if (!targets.isEmpty()) {
-                for (String targetName : targets) {
-                    CodeComponent targetComp = findOrCreateTargetComponent(targetName);
-                    if (targetComp != null) {
-                        createTargetActivityNode(targetComp);
-                    } else {
-                        // Optionally create a placeholder node with the name
-                        createTargetPlaceholderNode(targetName);
-                    }
-                }
-                expanded = true;
-            } else {
-                toggleExpansion();
-            }
-        }
+        // Do not trigger expansions here to preserve lazy-load behavior
         return component.getName();
     }
 
@@ -671,20 +656,8 @@ public class GraphNode {
 
 
     private void handleIntentNodeClick() {
-        List<String> targets = extractTargetActivitiesFromIntent();
-        if (targets != null && !targets.isEmpty()) {
-            for (String target : targets) {
-                CodeComponent targetComp = findOrCreateTargetComponent(target);
-                if (targetComp != null) {
-                    createTargetActivityNode(targetComp);
-                } else {
-                    createTargetPlaceholderNode(target);
-                }
-            }
-            expanded = true;
-        } else {
-            toggleExpansion();
-        }
+        // Delegate to standard expand/collapse flow so createChildNodes handles intent targets
+        toggleExpansion();
     }
 
 

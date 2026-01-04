@@ -16,7 +16,7 @@ public class Main extends Application {
         Parent root = FXMLLoader.load(Objects.requireNonNull(
                 getClass().getResource("/fxml/main.fxml")));
 
-        primaryStage.setTitle("CodeCartographer - Project Architecture Visualizer");
+        primaryStage.setTitle("Android Project Architecture Visualizer");
         // Try to load an application icon if available
         java.net.URL iconUrl = getClass().getResource("/icon.png");
         if (iconUrl != null) {

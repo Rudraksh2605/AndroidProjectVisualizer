@@ -5,13 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="96e75262-d0be-4199-aeba-7ace1778131c" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/gradle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/gradle.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeComponent.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeComponent.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/Main.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/JavaFileParser.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/parsers/KotlinParser.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/ProjectAnalysisService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/ProjectAnalysisService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphNode.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/GraphNode.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -57,18 +54,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Rudraksh2605"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Rudraksh2605&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/Rudraksh2605/AndroidProjectVisualizer.git",
-    "accountId": "fee6a5d4-55cb-41a3-a1de-f07556fcef41"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Rudraksh2605/AndroidProjectVisualizer.git&quot;,
+    &quot;accountId&quot;: &quot;fee6a5d4-55cb-41a3-a1de-f07556fcef41&quot;
   }
-}]]></component>
+}</component>
   <component name="GradleScriptDefinitionsStorage" workingDir="$PROJECT_DIR$" gradleHome="C:\Users\rudra\.gradle\wrapper\dists\gradle-8.5-bin\5t9huq95ubn472n8rpzujfbqh\gradle-8.5" javaHome="C:\Program Files\Java\jdk-17" gradleVersion="8.5" />
   <component name="MacroExpansionManager">
     <option name="directoryName" value="ebkvRqJE" />
@@ -116,7 +113,7 @@
     "project.structure.last.edited": "Libraries",
     "project.structure.proportion": "0.15429688",
     "project.structure.side.proportion": "0.0",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "settings.editor.selected.configurable": "configurable.group.language",
     "show.migrate.to.gradle.popup": "false",
     "to.speed.mode.migration.done": "true",
     "vue.rearranger.settings.migration": "true"
@@ -267,6 +264,7 @@
       <workItem from="1764665248644" duration="385000" />
       <workItem from="1764743913677" duration="2212000" />
       <workItem from="1765000176467" duration="5131000" />
+      <workItem from="1767548034651" duration="2378000" />
     </task>
     <servers />
   </component>

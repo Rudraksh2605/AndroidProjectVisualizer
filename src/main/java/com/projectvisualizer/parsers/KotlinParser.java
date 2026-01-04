@@ -225,28 +225,34 @@ public class KotlinParser {
             }
 
             // --- NEW: Attach analyzed Intent Flows as formal CodeComponents ---
+            // REPLACEMENT LOGIC
             for (CodeComponent component : components) {
                 if (intentFlows != null && !intentFlows.isEmpty()) {
                     for (NavigationFlow flow : intentFlows) {
-                        // Match flow source to current component name
-                        // We use a lenient match since sourceScreenId might be simple name or qualified
-                        if (component.getName().equals(flow.getSourceScreenId()) ||
-                                (component.getId() != null && component.getId().endsWith("." + flow.getSourceScreenId()))) {
+                        // Match flow source to current component
+                        boolean isSource = component.getName().equals(flow.getSourceScreenId()) ||
+                                           (component.getId() != null && component.getId().endsWith("." + flow.getSourceScreenId()));
 
-                            CodeComponent intentComp = new CodeComponent();
-                            intentComp.setId(UUID.randomUUID().toString());
-                            intentComp.setName("Intent to " + flow.getTargetScreenId()); // Descriptive name
-                            intentComp.setType("Intent");
-                            intentComp.setLayer("UI");
+                        if (isSource) {
+                            String targetId = flow.getTargetScreenId();
+                            if (targetId == null || targetId.equals("Unknown") || targetId.isEmpty()) continue;
 
-                            // Add target as explicit dependency for robustness
-                            CodeComponent targetDep = new CodeComponent();
-                            targetDep.setId("dep_" + flow.getTargetScreenId());
-                            targetDep.setName(flow.getTargetScreenId());
-                            targetDep.setType("Activity");
-                            intentComp.addDependency(targetDep);
+                            // 1. Register for visual styling (dashed line)
+                            component.addNavigationTarget(targetId);
 
-                            component.addIntent(intentComp);
+                            // 2. Add direct dependency to the Target Activity (dedupe)
+                            boolean exists = component.getDependencies().stream()
+                                    .anyMatch(dep -> dep.getName().equals(targetId));
+
+                            if (!exists) {
+                                CodeComponent targetActivity = new CodeComponent();
+                                targetActivity.setId(targetId);
+                                targetActivity.setName(targetId);
+                                targetActivity.setType("Activity"); // Forces UI node rendering
+                                targetActivity.setLayer("UI");      // Forces UI layer color
+
+                                component.addDependency(targetActivity);
+                            }
                         }
                     }
                 }
