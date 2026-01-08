@@ -10,6 +10,15 @@ public class AnalysisResult {
     private Map<String, String> activityLayoutMap;
     private String error;
     private Map<String, List<CodeComponent>> categorizedComponents;
+    private List<BusinessProcessComponent> businessProcesses;
+
+    public List<BusinessProcessComponent> getBusinessProcesses() {
+        return businessProcesses;
+    }
+
+    public void setBusinessProcesses(List<BusinessProcessComponent> businessProcesses) {
+        this.businessProcesses = businessProcesses;
+    }
 
     public Map<String, List<CodeComponent>> getCategorizedComponents() {
         return categorizedComponents;

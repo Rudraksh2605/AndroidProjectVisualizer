@@ -1,6 +1,8 @@
 package com.projectvisualizer.controllers;
 
 import com.projectvisualizer.model.CodeComponent;
+import com.projectvisualizer.model.CodeMethod;
+import com.projectvisualizer.model.ComplexityInfo;
 import com.projectvisualizer.model.AnalysisResult;
 import com.projectvisualizer.services.ProjectAnalysisService;
 import com.projectvisualizer.visualization.GraphManager;
@@ -42,6 +44,7 @@ import java.awt.image.BufferedImage;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import com.projectvisualizer.services.ComponentCategorizer;
+import com.projectvisualizer.visualization.UseCaseDiagramGenerator;
 
 public class MainController implements Initializable {
 
@@ -52,6 +55,7 @@ public class MainController implements Initializable {
     @FXML private ListView<String> componentsListView;
     @FXML private TextArea plantUMLTextArea;
     @FXML private TextArea graphvizTextArea;
+    @FXML private VBox statisticsContainer;
 
     @FXML private Tab plantUMLImageTab;
     @FXML private Tab graphvizImageTab;
@@ -925,6 +929,7 @@ public class MainController implements Initializable {
         MenuItem dataModelItems = new MenuItem("Show Data Models Only");
         MenuItem businessLogicItems = new MenuItem("Show Business Logic Only");
         MenuItem navigationItems = new MenuItem("Show Navigation Only");
+        MenuItem useCaseItems = new MenuItem("Show Use Case Diagram");
         MenuItem relationshipsItems = new MenuItem("Show Component Relationships");
 
         allItems.setOnAction(e -> setViewMode("ALL"));
@@ -932,11 +937,12 @@ public class MainController implements Initializable {
         dataModelItems.setOnAction(e -> setViewMode("DATA_MODEL"));
         businessLogicItems.setOnAction(e -> setViewMode("BUSINESS_LOGIC"));
         navigationItems.setOnAction(e -> setViewMode("NAVIGATION"));
+        useCaseItems.setOnAction(e -> setViewMode("USE_CASE"));
         relationshipsItems.setOnAction(e -> showComponentRelationships());
 
         viewModeMenuButton.getItems().addAll(
                 allItems, uiItems, dataModelItems, businessLogicItems,
-                navigationItems, new SeparatorMenuItem(), relationshipsItems
+                navigationItems, useCaseItems, new SeparatorMenuItem(), relationshipsItems
         );
     }
 
@@ -961,6 +967,7 @@ public class MainController implements Initializable {
             case "DATA_MODEL": return "Data Models";
             case "BUSINESS_LOGIC": return "Business Logic";
             case "NAVIGATION": return "Navigation/Intents";
+            case "USE_CASE": return "Use Case Diagram";
             default: return "All Components";
         }
     }
@@ -1061,13 +1068,181 @@ public class MainController implements Initializable {
         // Update diagrams
         updateDiagrams(result);
 
+        // Populate complexity statistics in Statistics tab
+        populateStatisticsTab(result.getComponents());
+
         handleResetZoom();
         diagramScrollPane.setVvalue(0);
         diagramScrollPane.setHvalue(0);
     }
 
+    /**
+     * Populates the Statistics tab with complexity analysis for all components.
+     */
+    private void populateStatisticsTab(List<CodeComponent> components) {
+        if (statisticsContainer == null) {
+            System.err.println("Statistics container not bound");
+            return;
+        }
+
+        statisticsContainer.getChildren().clear();
+
+        // Summary header
+        Label summaryLabel = new Label("📊 Complexity Analysis");
+        summaryLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;");
+        statisticsContainer.getChildren().add(summaryLabel);
+
+        // Collect stats
+        int totalMethods = 0;
+        int highComplexityMethods = 0;
+        int mediumComplexityMethods = 0;
+        int lowComplexityMethods = 0;
+
+        for (CodeComponent component : components) {
+            if (component.getMethods() == null) continue;
+            for (CodeMethod method : component.getMethods()) {
+                totalMethods++;
+                ComplexityInfo info = method.getComplexityInfo();
+                if (info != null) {
+                    int severity = info.getSeverityLevel();
+                    if (severity == 3) highComplexityMethods++;
+                    else if (severity == 2) mediumComplexityMethods++;
+                    else lowComplexityMethods++;
+                } else {
+                    lowComplexityMethods++;
+                }
+            }
+        }
+
+        // Summary stats
+        HBox summaryBox = new HBox(20);
+        summaryBox.setStyle("-fx-padding: 10; -fx-background-color: #f0f4f8; -fx-background-radius: 8;");
+        summaryBox.getChildren().addAll(
+            createStatCard("Total Methods", String.valueOf(totalMethods), "#3b82f6"),
+            createStatCard("🟢 Low (O(1), O(log n))", String.valueOf(lowComplexityMethods), "#10b981"),
+            createStatCard("🟡 Medium (O(n))", String.valueOf(mediumComplexityMethods), "#f59e0b"),
+            createStatCard("🔴 High (O(n²)+)", String.valueOf(highComplexityMethods), "#ef4444")
+        );
+        statisticsContainer.getChildren().add(summaryBox);
+
+        // Separator
+        statisticsContainer.getChildren().add(new javafx.scene.control.Separator());
+
+        // Per-component cards
+        Label detailLabel = new Label("📄 Per-File Complexity Breakdown");
+        detailLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #555; -fx-padding: 10 0 5 0;");
+        statisticsContainer.getChildren().add(detailLabel);
+
+        for (CodeComponent component : components) {
+            if (component.getMethods() == null || component.getMethods().isEmpty()) continue;
+
+            // Create component card
+            VBox componentCard = createComponentComplexityCard(component);
+            statisticsContainer.getChildren().add(componentCard);
+        }
+    }
+
+    private VBox createStatCard(String title, String value, String color) {
+        VBox card = new VBox(5);
+        card.setStyle("-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 8; " +
+                     "-fx-border-color: #e0e0e0; -fx-border-radius: 8;");
+        
+        Label valueLabel = new Label(value);
+        valueLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
+        
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        
+        card.getChildren().addAll(valueLabel, titleLabel);
+        return card;
+    }
+
+    private VBox createComponentComplexityCard(CodeComponent component) {
+        VBox card = new VBox(8);
+        card.setStyle("-fx-background-color: white; -fx-padding: 12; -fx-background-radius: 8; " +
+                     "-fx-border-color: #e0e0e0; -fx-border-radius: 8; -fx-margin: 5 0;");
+
+        // Find worst complexity for header
+        String worstComplexity = "O(1)";
+        String emoji = "🟢";
+        int maxSeverity = 1;
+
+        for (CodeMethod method : component.getMethods()) {
+            ComplexityInfo info = method.getComplexityInfo();
+            if (info != null && info.getSeverityLevel() > maxSeverity) {
+                maxSeverity = info.getSeverityLevel();
+                worstComplexity = info.getTimeComplexity();
+                emoji = info.getSeverityEmoji();
+            }
+        }
+
+        // Header
+        HBox header = new HBox(10);
+        header.setStyle("-fx-alignment: center-left;");
+        
+        Label fileLabel = new Label("📄 " + component.getName());
+        fileLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
+        
+        javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
+        HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
+        
+        Label complexityBadge = new Label(emoji + " " + worstComplexity);
+        String badgeColor = maxSeverity == 3 ? "#fef2f2" : (maxSeverity == 2 ? "#fffbeb" : "#f0fdf4");
+        String textColor = maxSeverity == 3 ? "#dc2626" : (maxSeverity == 2 ? "#d97706" : "#16a34a");
+        complexityBadge.setStyle("-fx-background-color: " + badgeColor + "; -fx-padding: 4 8; " +
+                                "-fx-background-radius: 4; -fx-font-weight: bold; -fx-text-fill: " + textColor + ";");
+        
+        header.getChildren().addAll(fileLabel, spacer, complexityBadge);
+        card.getChildren().add(header);
+
+        // Method list
+        for (CodeMethod method : component.getMethods()) {
+            ComplexityInfo info = method.getComplexityInfo();
+            String time = info != null ? info.getTimeComplexity() : "O(1)";
+            String space = info != null ? info.getSpaceComplexity() : "O(1)";
+            String methodEmoji = info != null ? info.getSeverityEmoji() : "🟢";
+
+            HBox methodRow = new HBox(10);
+            methodRow.setStyle("-fx-padding: 4 0 4 20;");
+
+            Label methodName = new Label("▸ " + method.getName() + "()");
+            methodName.setStyle("-fx-font-size: 12px; -fx-text-fill: #444; -fx-min-width: 200;");
+
+            Label timeLabel = new Label(methodEmoji + " Time: " + time);
+            timeLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+            Label spaceLabel = new Label("Space: " + space);
+            spaceLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+            methodRow.getChildren().addAll(methodName, timeLabel, spaceLabel);
+            card.getChildren().add(methodRow);
+        }
+
+        return card;
+    }
+
     private void updateDiagrams(AnalysisResult result) {
         try {
+            // Check if Use Case Diagram mode is selected
+            if ("USE_CASE".equals(diagramViewMode)) {
+                if (plantUMLTextArea != null) {
+                    UseCaseDiagramGenerator useCaseGenerator = new UseCaseDiagramGenerator();
+                    // Pass both components and business processes for comprehensive use case extraction
+                    String useCasePuml = useCaseGenerator.generatePlantUML(
+                        result.getComponents(), 
+                        result.getBusinessProcesses()
+                    );
+                    plantUMLTextArea.setText(useCasePuml);
+                    renderPlantUml(false);
+                }
+                // Clear Graphviz area since Use Case is PlantUML-only
+                if (graphvizTextArea != null) {
+                    graphvizTextArea.setText("// Use Case diagrams are rendered in PlantUML only.\n// Switch to another view mode to see Graphviz diagrams.");
+                }
+                return;
+            }
+            
+            // Default diagram generation for other modes
             if (plantUMLTextArea != null) {
                 String puml = buildCategorizedPlantUml(result.getComponents());
                 plantUMLTextArea.setText(puml);

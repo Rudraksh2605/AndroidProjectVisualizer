@@ -469,7 +469,132 @@ public class KotlinParser {
                 component.getDependencies().add(dependency);
             }
 
+            // Analyze complexity for Kotlin function
+            ComplexityInfo complexity = analyzeKotlinComplexity(function);
+            method.setComplexityInfo(complexity);
+
             component.getMethods().add(method);
+        }
+    }
+
+    /**
+     * Analyzes complexity for a Kotlin function using heuristics on the function body.
+     */
+    private ComplexityInfo analyzeKotlinComplexity(KtNamedFunction function) {
+        ComplexityInfo info = new ComplexityInfo();
+        
+        if (function.getBodyExpression() == null) {
+            info.setRationale("Empty or abstract function");
+            return info;
+        }
+
+        String bodyText = function.getBodyExpression().getText();
+        if (bodyText == null || bodyText.isEmpty()) {
+            return info;
+        }
+
+        // Analyze loop depth using pattern matching
+        int loopDepth = analyzeKotlinLoopDepth(bodyText);
+        info.setLoopDepth(loopDepth);
+
+        // Check for recursion (self-call)
+        String functionName = function.getName();
+        if (functionName != null && bodyText.contains(functionName + "(")) {
+            info.setHasRecursion(true);
+            info.addContributor("Recursion detected");
+        }
+
+        // Check for known method calls
+        if (bodyText.contains(".sorted") || bodyText.contains(".sortBy") || bodyText.contains(".sortedBy")) {
+            info.addContributor("Sort operation: O(n log n)");
+        }
+        if (bodyText.contains(".binarySearch")) {
+            info.addContributor("Binary search: O(log n)");
+        }
+        if (bodyText.contains(".filter") || bodyText.contains(".map") || bodyText.contains(".forEach")) {
+            info.addContributor("Collection operation: O(n)");
+        }
+
+        // Analyze space complexity
+        if (bodyText.contains("mutableListOf") || bodyText.contains("ArrayList") || 
+            bodyText.contains("mutableMapOf") || bodyText.contains("HashMap") ||
+            bodyText.contains("arrayOf") || bodyText.contains("listOf")) {
+            info.setSpaceComplexity("O(n)");
+            info.addContributor("Collection allocation");
+        }
+
+        // Determine time complexity
+        String timeComplexity = determineKotlinTimeComplexity(loopDepth, info.isHasRecursion(), info);
+        info.setTimeComplexity(timeComplexity);
+
+        // Generate rationale
+        StringBuilder rationale = new StringBuilder();
+        if (loopDepth > 0) {
+            rationale.append("Loop depth: ").append(loopDepth).append(". ");
+        }
+        if (info.isHasRecursion()) {
+            rationale.append("Contains recursion. ");
+        }
+        if (!info.getContributors().isEmpty()) {
+            rationale.append("Contributors: ").append(String.join(", ", info.getContributors()));
+        }
+        if (rationale.length() == 0) {
+            rationale.append("Simple constant-time operations");
+        }
+        info.setRationale(rationale.toString().trim());
+
+        return info;
+    }
+
+    private int analyzeKotlinLoopDepth(String bodyText) {
+        int maxDepth = 0;
+        int currentDepth = 0;
+        
+        // Simple pattern matching for Kotlin loops
+        String[] lines = bodyText.split("\n");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("for ") || trimmed.startsWith("for(") ||
+                trimmed.startsWith("while ") || trimmed.startsWith("while(") ||
+                trimmed.startsWith("do {") || trimmed.contains(".forEach") ||
+                trimmed.contains(".map {") || trimmed.contains(".filter {")) {
+                currentDepth++;
+                maxDepth = Math.max(maxDepth, currentDepth);
+            }
+            // Simple brace tracking for depth
+            if (trimmed.endsWith("}") && currentDepth > 0) {
+                currentDepth--;
+            }
+        }
+        
+        return maxDepth;
+    }
+
+    private String determineKotlinTimeComplexity(int loopDepth, boolean hasRecursion, ComplexityInfo info) {
+        if (hasRecursion) {
+            if (loopDepth > 0) {
+                return "O(2ⁿ)";
+            }
+            return "O(n)";
+        }
+
+        switch (loopDepth) {
+            case 0:
+                // Check for sort operations
+                for (String contributor : info.getContributors()) {
+                    if (contributor.contains("Sort")) return "O(n log n)";
+                    if (contributor.contains("Binary search")) return "O(log n)";
+                    if (contributor.contains("Collection operation")) return "O(n)";
+                }
+                return "O(1)";
+            case 1:
+                return "O(n)";
+            case 2:
+                return "O(n²)";
+            case 3:
+                return "O(n³)";
+            default:
+                return "O(n^" + loopDepth + ")";
         }
     }
 

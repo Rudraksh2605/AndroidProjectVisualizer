@@ -11,6 +11,7 @@ public class CodeMethod {
     private List<String> parameters;
     private boolean isStatic;
     private boolean isAbstract;
+    private ComplexityInfo complexityInfo;
 
     public CodeMethod() {
         this.parameters = new ArrayList<>();
@@ -34,6 +35,9 @@ public class CodeMethod {
 
     public boolean isAbstract() { return isAbstract; }
     public void setAbstract(boolean isAbstract) { this.isAbstract = isAbstract; }
+
+    public ComplexityInfo getComplexityInfo() { return complexityInfo; }
+    public void setComplexityInfo(ComplexityInfo complexityInfo) { this.complexityInfo = complexityInfo; }
 
     // Helper method
     public void addParameter(String parameter) {

@@ -15,12 +15,14 @@ public class ProjectAnalysisService {
     private AndroidManifestParser manifestParser;
     private Map<String, String> activityLayoutMap;
     private UniversalNavigationParser navigationParser;
+    private BusinessProcessExtractor processExtractor;
 
 
     public ProjectAnalysisService() {
         this.xmlParser = new XmlParser();
         this.manifestParser = new AndroidManifestParser();
         this.navigationParser = new UniversalNavigationParser();
+        this.processExtractor = new BusinessProcessExtractor();
     }
 
     public AnalysisResult analyzeProject(File projectDir) {
@@ -40,11 +42,15 @@ public class ProjectAnalysisService {
             List<UserFlowComponent> userFlows = extractUserFlows(allComponents, navigationFlows);
             Map<String, List<CodeComponent>> categorizedComponents = categorizeComponents(allComponents);
 
+            // Extract business processes from user flows for Use Case diagrams
+            List<BusinessProcessComponent> businessProcesses = processExtractor.extractBusinessProcesses(userFlows);
+
             result.setComponents(allComponents);
             result.setNavigationFlows(navigationFlows);
             result.setUserFlows(userFlows);
             result.setActivityLayoutMap(activityLayoutMap);
             result.setCategorizedComponents(categorizedComponents);
+            result.setBusinessProcesses(businessProcesses);
 
         } catch (Exception e) {
             result.setError(e.getMessage());

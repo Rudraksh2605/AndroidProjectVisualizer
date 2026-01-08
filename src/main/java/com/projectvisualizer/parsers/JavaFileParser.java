@@ -322,6 +322,8 @@ public class JavaFileParser {
     }
 
     private static class MethodVisitor extends VoidVisitorAdapter<CodeComponent> {
+        private static final ComplexityAnalyzer complexityAnalyzer = new ComplexityAnalyzer();
+
         @Override
         public void visit(MethodDeclaration n, CodeComponent component) {
             CodeMethod method = new CodeMethod();
@@ -334,6 +336,10 @@ public class JavaFileParser {
                 parameters.add(p.getNameAsString() + ": " + p.getType().asString());
             }
             method.setParameters(parameters);
+
+            // Analyze method complexity
+            ComplexityInfo complexity = complexityAnalyzer.analyzeMethod(n);
+            method.setComplexityInfo(complexity);
 
             component.getMethods().add(method);
             super.visit(n, component);
