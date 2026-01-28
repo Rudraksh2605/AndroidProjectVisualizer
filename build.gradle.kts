@@ -62,6 +62,12 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.16.1")
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.16.1")
 
+    // PDF Generation
+    implementation("com.itextpdf:itext7-core:7.2.5")
+
+    // LLM Inference - llama.java for Phi-2 GGUF model with GPU support
+    implementation("de.kherud:llama:3.2.1")
+
     testImplementation(platform("org.junit:junit-bom:5.10.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.mockito:mockito-core:5.8.0")
@@ -95,3 +101,30 @@ java {
     modularity.inferModulePath.set(true)
 }
 
+// LLM Model Configuration
+val modelDir = file("$projectDir/models")
+val nativesDir = file("$buildDir/natives")
+
+// Task to create models directory
+tasks.register("createModelDir") {
+    doLast {
+        modelDir.mkdirs()
+        println("Models directory created at: ${modelDir.absolutePath}")
+        println("Please download phi-2 GGUF model from HuggingFace and place it in this directory.")
+        println("Recommended: https://huggingface.co/TheBloke/phi-2-GGUF/resolve/main/phi-2.Q4_K_M.gguf")
+    }
+}
+
+// Task to copy native libraries for distribution
+tasks.register<Copy>("copyNativeLibs") {
+    dependsOn("jar")
+    from(configurations.runtimeClasspath.get().filter { 
+        it.name.contains("llama") || it.name.contains("jna")
+    })
+    into(nativesDir)
+}
+
+// Ensure models directory exists during build
+tasks.named("processResources") {
+    dependsOn("createModelDir")
+}

@@ -45,6 +45,22 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import com.projectvisualizer.services.ComponentCategorizer;
 import com.projectvisualizer.visualization.UseCaseDiagramGenerator;
+import javax.imageio.ImageIO;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.image.WritableImage;
+import java.io.FileWriter;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.layout.Document;
+import com.itextpdf.layout.element.Paragraph;
+import com.itextpdf.layout.properties.TextAlignment;
+import com.itextpdf.kernel.font.PdfFontFactory;
+import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.layout.element.Text;
+
+
 
 public class MainController implements Initializable {
 
@@ -59,8 +75,13 @@ public class MainController implements Initializable {
 
     @FXML private Tab plantUMLImageTab;
     @FXML private Tab graphvizImageTab;
+    @FXML private Tab documentationTab;
+    @FXML private Tab projectDocsTab;
     @FXML private ImageView plantUMLImageView;
     @FXML private ImageView graphvizImageView;
+    @FXML private VBox documentationContainer;
+    @FXML private VBox projectDocsContainer;
+    @FXML private Label projectDocsStatusLabel;
 
     @FXML private Label zoomLabel;
 
@@ -82,6 +103,8 @@ public class MainController implements Initializable {
     private double graphvizZoom = 1.0;
     private String diagramViewMode = "ALL"; // used to filter diagram outputs
     private AnalysisResult currentAnalysisResult;
+    private String currentProjectName;
+    private String currentProjectPath;
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -90,7 +113,37 @@ public class MainController implements Initializable {
         initializeEventHandlers();
         initializeStatusBar();
         initializeViewModeMenu();
+        initializeDocumentation();
         loadSampleData();
+        initializeAI(); // Auto-load Phi-2 model
+    }
+    
+    /**
+     * Initializes and auto-loads the Phi-2 AI model on startup.
+     */
+    private void initializeAI() {
+        com.projectvisualizer.ai.ProjectUnderstandingService aiService = 
+            com.projectvisualizer.ai.ProjectUnderstandingService.getInstance();
+        
+        if (aiService.isModelAvailable() && !aiService.isReady() && !aiService.isLoading()) {
+            statusLabel.setText("🤖 Loading Phi-2 AI model...");
+            
+            aiService.initializeAsync(progress -> {
+                javafx.application.Platform.runLater(() -> {
+                    statusLabel.setText(progress);
+                });
+            }).thenAccept(success -> {
+                javafx.application.Platform.runLater(() -> {
+                    if (success) {
+                        statusLabel.setText("🤖 Phi-2 AI model loaded successfully");
+                    } else {
+                        statusLabel.setText("AI model not loaded (download from Hugging Face)");
+                    }
+                });
+            });
+        } else if (!aiService.isModelAvailable()) {
+            statusLabel.setText("AI model not found. Download Phi-2 GGML to enable AI features.");
+        }
     }
 
     private void initializeGraphCanvas() {
@@ -214,6 +267,207 @@ public class MainController implements Initializable {
         startMemoryMonitoring();
     }
 
+    private void initializeDocumentation() {
+        if (documentationContainer == null) return;
+        documentationContainer.getChildren().clear();
+        documentationContainer.setSpacing(24);
+
+        // ===== HERO SECTION =====
+        VBox hero = new VBox(12);
+        hero.getStyleClass().add("doc-hero");
+        
+        HBox heroHeader = new HBox(16);
+        heroHeader.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        Label heroTitle = new Label("\uD83D\uDCF1 Android Project Visualizer");
+        heroTitle.getStyleClass().add("doc-hero-title");
+        Label versionBadge = new Label("v1.0.0");
+        versionBadge.getStyleClass().add("doc-hero-version");
+        heroHeader.getChildren().addAll(heroTitle, versionBadge);
+        
+        Label heroSubtitle = new Label("A powerful tool for visualizing and understanding Android project architectures. " +
+            "Analyze code structure, generate UML diagrams, detect patterns, and gain insights into your codebase.");
+        heroSubtitle.getStyleClass().add("doc-hero-subtitle");
+        heroSubtitle.setWrapText(true);
+        
+        hero.getChildren().addAll(heroHeader, heroSubtitle);
+        documentationContainer.getChildren().add(hero);
+
+        // ===== GETTING STARTED SECTION =====
+        VBox gettingStarted = createDocSection("\uD83D\uDE80 Getting Started", 
+            "Open any Android project folder to begin analysis. The tool will automatically parse Java, Kotlin, and XML files, " +
+            "extract component relationships, and generate interactive architecture visualizations.");
+        
+        VBox stepsList = new VBox(4);
+        stepsList.getChildren().addAll(
+            createDocListItem("1. Go to File → Open Project or press Ctrl+O"),
+            createDocListItem("2. Select your Android project's root directory"),
+            createDocListItem("3. Wait for analysis to complete (progress shown in status bar)"),
+            createDocListItem("4. Explore the generated diagrams and statistics")
+        );
+        gettingStarted.getChildren().add(stepsList);
+        documentationContainer.getChildren().add(gettingStarted);
+
+        // ===== SCREENS & TABS SECTION =====
+        VBox screensSection = createDocSection("\uD83D\uDCCB Screens & Tabs", 
+            "The application provides multiple views for different aspects of your project analysis:");
+        
+        VBox tabCards = new VBox(12);
+        tabCards.getChildren().addAll(
+            createDocCard("\uD83C\uDFDB\uFE0F Architecture", "Interactive graph visualization of your project's component structure. Click components in the tree to add them to the canvas. Use zoom controls to navigate large diagrams."),
+            createDocCard("\uD83D\uDD17 Dependencies", "Detailed view of component dependencies and relationships. Identify coupling issues and understand how components interconnect."),
+            createDocCard("\uD83D\uDCCA Statistics", "Project metrics including total files, lines of code, component counts by type, and code complexity analysis per method."),
+            createDocCard("\uD83C\uDF31 PlantUML", "Generated PlantUML diagram code. Copy or save to use in other tools. Supports class diagrams and use case diagrams."),
+            createDocCard("\uD83D\uDD37 Graphviz", "Generated Graphviz DOT notation for alternative diagram rendering. Compatible with GraphViz tools."),
+            createDocCard("\uD83D\uDDBC\uFE0F PlantUML Preview", "Rendered PlantUML diagram as an image. Zoom in/out and export as PNG for documentation."),
+            createDocCard("\uD83D\uDDBC\uFE0F Graphviz Preview", "Rendered Graphviz diagram as an image with export capabilities.")
+        );
+        screensSection.getChildren().add(tabCards);
+        documentationContainer.getChildren().add(screensSection);
+
+        // ===== KEYBOARD SHORTCUTS =====
+        VBox shortcutsSection = createDocSection("⌨\uFE0F Keyboard Shortcuts", 
+            "Quick access to common actions:");
+        
+        javafx.scene.layout.GridPane shortcutsGrid = new javafx.scene.layout.GridPane();
+        shortcutsGrid.setHgap(24);
+        shortcutsGrid.setVgap(12);
+        shortcutsGrid.add(createKbdLabel("Ctrl+O"), 0, 0);
+        shortcutsGrid.add(new Label("Open Project"), 1, 0);
+        shortcutsGrid.add(createKbdLabel("Ctrl+R"), 0, 1);
+        shortcutsGrid.add(new Label("Export Report"), 1, 1);
+        shortcutsGrid.add(createKbdLabel("Ctrl++"), 0, 2);
+        shortcutsGrid.add(new Label("Zoom In"), 1, 2);
+        shortcutsGrid.add(createKbdLabel("Ctrl+-"), 0, 3);
+        shortcutsGrid.add(new Label("Zoom Out"), 1, 3);
+        shortcutsGrid.add(createKbdLabel("Ctrl+0"), 0, 4);
+        shortcutsGrid.add(new Label("Reset Zoom"), 1, 4);
+        shortcutsGrid.add(createKbdLabel("F1"), 0, 5);
+        shortcutsGrid.add(new Label("Documentation"), 1, 5);
+        shortcutsSection.getChildren().add(shortcutsGrid);
+        documentationContainer.getChildren().add(shortcutsSection);
+
+        // ===== AI FEATURES SECTION =====
+        VBox aiSection = createDocSection("\uD83E\uDD16 AI-Enhanced Analysis", 
+            "Optional AI-powered features using Microsoft Phi-2 for deeper code understanding:");
+        
+        VBox aiFeatures = new VBox(8);
+        aiFeatures.getChildren().addAll(
+            createDocListItem("• Intelligent use case extraction from method names and patterns"),
+            createDocListItem("• Natural language descriptions of component functionality"),
+            createDocListItem("• Automatic actor detection for use case diagrams"),
+            createDocListItem("• GPU-accelerated inference for fast analysis")
+        );
+        
+        VBox aiNote = new VBox(8);
+        aiNote.setStyle("-fx-background-color: rgba(251, 191, 36, 0.1); -fx-background-radius: 10; -fx-padding: 16;");
+        Label aiNoteLabel = new Label("⚠\uFE0F AI features require downloading the Phi-2 model (~1.6GB). See AI_SETUP.md for instructions.");
+        aiNoteLabel.setWrapText(true);
+        aiNoteLabel.getStyleClass().add("doc-text");
+        aiNote.getChildren().add(aiNoteLabel);
+        
+        aiSection.getChildren().addAll(aiFeatures, aiNote);
+        documentationContainer.getChildren().add(aiSection);
+
+        // ===== TECH STACK SECTION =====
+        VBox techSection = createDocSection("\uD83D\uDEE0\uFE0F Technical Details", 
+            "Built with modern technologies for robust performance:");
+        
+        javafx.scene.layout.GridPane techGrid = new javafx.scene.layout.GridPane();
+        techGrid.setHgap(16);
+        techGrid.setVgap(12);
+        techGrid.getStyleClass().add("doc-tech-grid");
+        techGrid.add(createTechItem("Language", "Java 17"), 0, 0);
+        techGrid.add(createTechItem("UI Framework", "JavaFX 17"), 1, 0);
+        techGrid.add(createTechItem("Build Tool", "Gradle (Kotlin DSL)"), 2, 0);
+        techGrid.add(createTechItem("Java Parsing", "JavaParser 3.x"), 0, 1);
+        techGrid.add(createTechItem("Kotlin Parsing", "Kotlin Compiler"), 1, 1);
+        techGrid.add(createTechItem("Diagrams", "PlantUML + Graphviz"), 2, 1);
+        techGrid.add(createTechItem("AI Engine", "llama.java (Phi-2)"), 0, 2);
+        techGrid.add(createTechItem("UI Library", "ControlsFX"), 1, 2);
+        techSection.getChildren().add(techGrid);
+        documentationContainer.getChildren().add(techSection);
+
+        // ===== PARSERS SECTION =====
+        VBox parsersSection = createDocSection("\uD83D\uDD0D Code Parsers", 
+            "12 specialized parsers for comprehensive Android project analysis:");
+        
+        VBox parsersList = new VBox(4);
+        parsersList.getChildren().addAll(
+            createDocListItem("• JavaFileParser - Parses Java classes, interfaces, methods, and annotations"),
+            createDocListItem("• KotlinParser - Full Kotlin support including data classes and extensions"),
+            createDocListItem("• XmlParser - Android resource files (layouts, strings, styles)"),
+            createDocListItem("• AndroidManifestParser - Activities, services, permissions extraction"),
+            createDocListItem("• NavigationGraphParser - Jetpack Navigation component support"),
+            createDocListItem("• IntentAnalyzer - Intent-based navigation detection"),
+            createDocListItem("• ComplexityAnalyzer - Cyclomatic complexity metrics")
+        );
+        parsersSection.getChildren().add(parsersList);
+        documentationContainer.getChildren().add(parsersSection);
+    }
+
+    private VBox createDocSection(String title, String description) {
+        VBox section = new VBox(12);
+        section.getStyleClass().add("doc-section");
+        
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("doc-section-header");
+        
+        Label descLabel = new Label(description);
+        descLabel.getStyleClass().add("doc-text");
+        descLabel.setWrapText(true);
+        
+        section.getChildren().addAll(titleLabel, descLabel);
+        return section;
+    }
+
+    private VBox createDocCard(String title, String description) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("doc-card");
+        
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("doc-card-title");
+        
+        Label descLabel = new Label(description);
+        descLabel.getStyleClass().add("doc-card-desc");
+        descLabel.setWrapText(true);
+        
+        card.getChildren().addAll(titleLabel, descLabel);
+        return card;
+    }
+
+    private HBox createDocListItem(String text) {
+        HBox item = new HBox(8);
+        item.getStyleClass().add("doc-list-item");
+        item.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        
+        Label textLabel = new Label(text);
+        textLabel.getStyleClass().add("doc-list-text");
+        textLabel.setWrapText(true);
+        
+        item.getChildren().add(textLabel);
+        return item;
+    }
+
+    private Label createKbdLabel(String shortcut) {
+        Label kbd = new Label(shortcut);
+        kbd.getStyleClass().add("doc-kbd");
+        return kbd;
+    }
+
+    private VBox createTechItem(String label, String value) {
+        VBox item = new VBox(4);
+        item.getStyleClass().add("doc-tech-item");
+        
+        Label labelNode = new Label(label.toUpperCase());
+        labelNode.getStyleClass().add("doc-tech-label");
+        
+        Label valueNode = new Label(value);
+        valueNode.getStyleClass().add("doc-tech-value");
+        
+        item.getChildren().addAll(labelNode, valueNode);
+        return item;
+    }
+
     private void loadSampleData() {
         // Create sample components for testing
         CodeComponent mainActivity = new CodeComponent();
@@ -265,8 +519,10 @@ public class MainController implements Initializable {
         File selectedDirectory = directoryChooser.showDialog(mainContainer.getScene().getWindow());
 
         if (selectedDirectory != null) {
-            statusLabel.setText("Loading project: " + selectedDirectory.getName());
-            projectInfoLabel.setText("Project: " + selectedDirectory.getName());
+            currentProjectName = selectedDirectory.getName();
+            currentProjectPath = selectedDirectory.getAbsolutePath();
+            statusLabel.setText("Loading project: " + currentProjectName);
+            projectInfoLabel.setText("Project: " + currentProjectName);
 
             progressContainer.setVisible(true);
             progressLabel.setText("Analyzing project structure...");
@@ -314,7 +570,45 @@ public class MainController implements Initializable {
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-            statusLabel.setText("Exported diagram to: " + file.getName());
+			try {
+				// Determine source based on active tab
+				Tab selectedTab = visualizationTabPane != null ? visualizationTabPane.getSelectionModel().getSelectedItem() : null;
+				Image imageToSave = null;
+				
+				if (selectedTab == plantUMLImageTab && plantUMLImageView != null) {
+					imageToSave = plantUMLImageView.getImage();
+				} else if (selectedTab == graphvizImageTab && graphvizImageView != null) {
+					imageToSave = graphvizImageView.getImage();
+				} else {
+					// Default to capturing the graph canvas
+					if (graphCanvas != null) {
+						WritableImage snapshot = graphCanvas.snapshot(new SnapshotParameters(), null);
+						imageToSave = snapshot;
+					}
+				}
+				
+				if (imageToSave != null) {
+					BufferedImage bufferedImage = SwingFXUtils.fromFXImage(imageToSave, null);
+					String fileName = file.getName().toLowerCase();
+					String format = "png";
+					if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+						format = "jpg";
+						// Convert transparent background to white for JPG
+						BufferedImage newBufferedImage = new BufferedImage(bufferedImage.getWidth(),
+								bufferedImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+						newBufferedImage.createGraphics().drawImage(bufferedImage, 0, 0, java.awt.Color.WHITE, null);
+						bufferedImage = newBufferedImage;
+					}
+					
+					ImageIO.write(bufferedImage, format, file);
+					statusLabel.setText("Exported diagram to: " + file.getName());
+				} else {
+					statusLabel.setText("Nothing to export (Image is null)");
+				}
+			} catch (IOException ex) {
+				statusLabel.setText("Export failed: " + ex.getMessage());
+				showErrorAlert("Export Failed", "Could not save image: " + ex.getMessage());
+			}
         }
     }
 
@@ -335,8 +629,149 @@ public class MainController implements Initializable {
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-            statusLabel.setText("Exported report to: " + file.getName());
+            try {
+				if (currentAnalysisResult == null) {
+					statusLabel.setText("No analysis data to export");
+					return;
+				}
+
+				// Generate documentation content
+				com.projectvisualizer.ai.ProjectUnderstandingService aiService = 
+					com.projectvisualizer.ai.ProjectUnderstandingService.getInstance();
+				
+				com.projectvisualizer.services.StructuredDocumentationGenerator generator = 
+					new com.projectvisualizer.services.StructuredDocumentationGenerator(
+						currentProjectPath, 
+						currentProjectName, 
+						currentAnalysisResult, 
+						aiService.isReady() ? aiService.getInferenceService() : null
+					);
+					
+				Map<String, String> docSections = generator.generateDocumentation();
+				StringBuilder reportContent = new StringBuilder();
+				
+
+				boolean isHtml = file.getName().toLowerCase().endsWith(".html");
+				boolean isJson = file.getName().toLowerCase().endsWith(".json");
+				boolean isPdf = file.getName().toLowerCase().endsWith(".pdf");
+				
+				if (isPdf) {
+				    exportToPdf(file, docSections, currentProjectName);
+				} else if (isJson) {
+					// Simple JSON construction
+					reportContent.append("{\n");
+					reportContent.append("  \"project\": \"").append(currentProjectName).append("\",\n");
+					reportContent.append("  \"sections\": {\n");
+					int i = 0;
+					for (Map.Entry<String, String> entry : docSections.entrySet()) {
+						reportContent.append("    \"").append(entry.getKey()).append("\": \"")
+							.append(entry.getValue().replace("\"", "\\\"").replace("\n", "\\n")).append("\"");
+						if (i < docSections.size() - 1) reportContent.append(",");
+						reportContent.append("\n");
+						i++;
+					}
+					reportContent.append("  }\n");
+					reportContent.append("}");
+					try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+					    writer.write(reportContent.toString());
+				    }
+				} else if (isHtml) {
+					reportContent.append("<!DOCTYPE html>\n<html>\n<head>\n");
+					reportContent.append("<title>Project Documentation - ").append(currentProjectName).append("</title>\n");
+					reportContent.append("<style>\n");
+					reportContent.append("body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }\n");
+					reportContent.append("h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }\n");
+					reportContent.append("h2 { color: #34495e; margin-top: 30px; }\n");
+					reportContent.append("h3 { color: #16a085; }\n");
+					reportContent.append("pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }\n");
+					reportContent.append("table { border-collapse: collapse; width: 100%; margin: 15px 0; }\n");
+					reportContent.append("th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }\n");
+					reportContent.append("th { background-color: #f2f2f2; }\n");
+					reportContent.append("tr:nth-child(even) { background-color: #f9f9f9; }\n");
+					reportContent.append("</style>\n</head>\n<body>\n");
+					reportContent.append("<h1>").append(currentProjectName).append(" Documentation</h1>\n");
+					
+					for (Map.Entry<String, String> entry : docSections.entrySet()) {
+						reportContent.append("<h2>").append(entry.getKey()).append("</h2>\n");
+						// Basic Markdown-to-HTML conversion
+						String content = entry.getValue()
+							.replace("\n", "<br/>\n")
+							.replaceAll("\\*\\*(.*?)\\*\\*", "<strong>$1</strong>")
+							.replaceAll("`(.*?)`", "<code>$1</code>")
+							.replaceAll("### (.*?)<br/>", "<h3>$1</h3>")
+							.replaceAll("\\| (.*?) \\|", "<tr><td>$1</td></tr>") // Very naive table
+							.replaceAll("<tr><td>- (.*?)</td></tr>", "<li>$1</li>"); // List items
+						
+						// Fix tables (naive fix)
+						if (content.contains("<tr>")) {
+							content = content.replace("<br/>", ""); // Remove breaks in tables
+							content = "<table>" + content + "</table>";
+						}
+						
+						reportContent.append("<div>").append(content).append("</div>\n");
+					}
+					reportContent.append("</body>\n</html>");
+					try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+					    writer.write(reportContent.toString());
+				    }
+				} else {
+					// Default Markdown/Text
+					reportContent.append("# Project Documentation: ").append(currentProjectName).append("\n\n");
+					for (Map.Entry<String, String> entry : docSections.entrySet()) {
+						reportContent.append("## ").append(entry.getKey()).append("\n\n");
+						reportContent.append(entry.getValue()).append("\n\n");
+					}
+					try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+					    writer.write(reportContent.toString());
+				    }
+				}
+				
+				statusLabel.setText("Exported report to: " + file.getName());
+            } catch (IOException ex) {
+                statusLabel.setText("Export failed: " + ex.getMessage());
+				showErrorAlert("Export Failed", "Could not save report: " + ex.getMessage());
+            }
         }
+    }
+
+    private void exportToPdf(File file, Map<String, String> sections, String projectName) throws IOException {
+        PdfWriter writer = new PdfWriter(file);
+        PdfDocument pdf = new PdfDocument(writer);
+        Document document = new Document(pdf);
+        
+        // Title
+        Paragraph title = new Paragraph(projectName + " Documentation")
+                .setTextAlignment(TextAlignment.CENTER)
+                .setFontSize(24)
+                .setBold();
+        document.add(title);
+        
+        // Sections
+        for (Map.Entry<String, String> entry : sections.entrySet()) {
+            // Header
+            document.add(new Paragraph(entry.getKey())
+                    .setFontSize(18)
+                    .setBold()
+                    .setMarginTop(20));
+            
+            // Content (Simple rendering)
+            String content = entry.getValue();
+            Paragraph p = new Paragraph(content)
+                    .setFontSize(12);
+            
+            // If content looks like a table or code, use monospace
+            if (content.contains("|") || content.contains("```")) {
+                try {
+                    p.setFont(PdfFontFactory.createFont(StandardFonts.COURIER));
+                } catch (Exception e) {
+                    // Ignore font error
+                }
+            }
+            
+            document.add(p);
+        }
+        
+        document.close();
     }
 
     @FXML
@@ -351,6 +786,95 @@ public class MainController implements Initializable {
     @FXML
     private void handleExit() {
         javafx.application.Platform.exit();
+    }
+
+    @FXML
+    private void handleShowDocumentation() {
+        if (visualizationTabPane != null && documentationTab != null) {
+            visualizationTabPane.getSelectionModel().select(documentationTab);
+            statusLabel.setText("Viewing documentation");
+        }
+    }
+
+    @FXML
+    private void handleShowAbout() {
+        Alert aboutDialog = new Alert(Alert.AlertType.INFORMATION);
+        aboutDialog.setTitle("About Android Project Visualizer");
+        aboutDialog.setHeaderText("Android Project Architecture Visualizer");
+        aboutDialog.setContentText(
+            "Version: 1.0.0\n\n" +
+            "A powerful tool for visualizing and understanding\n" +
+            "Android project architectures.\n\n" +
+            "Features:\n" +
+            "• Interactive architecture diagrams\n" +
+            "• PlantUML & Graphviz export\n" +
+            "• AI-enhanced use case detection\n" +
+            "• Code complexity analysis\n\n" +
+            "Built with JavaFX 17"
+        );
+        aboutDialog.showAndWait();
+    }
+
+    @FXML
+    private void handleViewProjectDocs() {
+        if (visualizationTabPane != null && projectDocsTab != null) {
+            visualizationTabPane.getSelectionModel().select(projectDocsTab);
+            statusLabel.setText("Viewing project documentation");
+        }
+    }
+
+    private void populateProjectDocumentation(AnalysisResult result, String projectName) {
+        if (projectDocsContainer == null) return;
+        
+        projectDocsContainer.getChildren().clear();
+        
+        if (result == null || result.getComponents() == null || result.getComponents().isEmpty()) {
+            if (projectDocsStatusLabel != null) {
+                projectDocsStatusLabel.setText("No project loaded");
+            }
+            return;
+        }
+        
+        try {
+            // Get AI service from ProjectUnderstandingService singleton
+            com.projectvisualizer.ai.ProjectUnderstandingService aiService = 
+                com.projectvisualizer.ai.ProjectUnderstandingService.getInstance();
+            
+            com.projectvisualizer.ai.Phi2InferenceService phi2Service = 
+                aiService.isReady() ? aiService.getInferenceService() : null;
+            
+            com.projectvisualizer.services.ProjectDocumentationGenerator generator = 
+                new com.projectvisualizer.services.ProjectDocumentationGenerator(result, projectName, currentProjectPath, phi2Service);
+            
+            if (aiService.isReady()) {
+                // Use AI-enhanced documentation
+                if (projectDocsStatusLabel != null) {
+                    projectDocsStatusLabel.setText("🤖 Generating AI-enhanced documentation...");
+                }
+                generator.generateDocumentationWithAI(projectDocsContainer, status -> {
+                    if (projectDocsStatusLabel != null) {
+                        projectDocsStatusLabel.setText(status);
+                    }
+                    statusLabel.setText(status);
+                });
+            } else {
+                // Fallback to pattern-based documentation
+                java.util.List<javafx.scene.layout.VBox> sections = generator.generateDocumentation();
+                projectDocsContainer.getChildren().addAll(sections);
+                
+                String aiStatus = aiService.isModelAvailable() ? 
+                    " (AI model available but not loaded)" : " (AI model not available)";
+                if (projectDocsStatusLabel != null) {
+                    projectDocsStatusLabel.setText("Documentation generated for " + projectName + aiStatus);
+                }
+                statusLabel.setText("Generated project documentation" + aiStatus);
+            }
+        } catch (Exception e) {
+            statusLabel.setText("Error generating documentation: " + e.getMessage());
+            if (projectDocsStatusLabel != null) {
+                projectDocsStatusLabel.setText("Error generating documentation");
+            }
+        }
     }
 
 
@@ -460,7 +984,13 @@ public class MainController implements Initializable {
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-            statusLabel.setText("Exported PlantUML to: " + file.getName());
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+				writer.write(plantUMLTextArea.getText());
+				statusLabel.setText("Exported PlantUML to: " + file.getName());
+			} catch (IOException ex) {
+				statusLabel.setText("Export failed: " + ex.getMessage());
+				showErrorAlert("Export Failed", "Could not save PlantUML file: " + ex.getMessage());
+			}
         }
     }
 
@@ -485,7 +1015,13 @@ public class MainController implements Initializable {
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-            statusLabel.setText("Exported Graphviz to: " + file.getName());
+             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+				writer.write(graphvizTextArea.getText());
+				statusLabel.setText("Exported Graphviz to: " + file.getName());
+			} catch (IOException ex) {
+				statusLabel.setText("Export failed: " + ex.getMessage());
+				showErrorAlert("Export Failed", "Could not save Graphviz file: " + ex.getMessage());
+			}
         }
     }
 
@@ -1071,6 +1607,9 @@ public class MainController implements Initializable {
         // Populate complexity statistics in Statistics tab
         populateStatisticsTab(result.getComponents());
 
+        // Generate project documentation
+        populateProjectDocumentation(result, currentProjectName);
+
         handleResetZoom();
         diagramScrollPane.setVvalue(0);
         diagramScrollPane.setHvalue(0);
@@ -1226,14 +1765,20 @@ public class MainController implements Initializable {
             // Check if Use Case Diagram mode is selected
             if ("USE_CASE".equals(diagramViewMode)) {
                 if (plantUMLTextArea != null) {
-                    UseCaseDiagramGenerator useCaseGenerator = new UseCaseDiagramGenerator();
-                    // Pass both components and business processes for comprehensive use case extraction
-                    String useCasePuml = useCaseGenerator.generatePlantUML(
+                    // Enable AI for enhanced use case analysis
+                    UseCaseDiagramGenerator useCaseGenerator = new UseCaseDiagramGenerator(true);
+                    
+                    // Initialize AI model asynchronously, then generate
+                    statusLabel.setText(useCaseGenerator.getAIStatusMessage());
+                    
+                    // Generate with AI enhancement (synchronous for now)
+                    String useCasePuml = useCaseGenerator.generatePlantUMLWithAI(
                         result.getComponents(), 
                         result.getBusinessProcesses()
                     );
                     plantUMLTextArea.setText(useCasePuml);
                     renderPlantUml(false);
+                    statusLabel.setText("Use Case diagram generated with AI analysis");
                 }
                 // Clear Graphviz area since Use Case is PlantUML-only
                 if (graphvizTextArea != null) {
