@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.stream.Collectors;
 
+
 /**
  * Generates structured, professional documentation from parsed project data.
  * Uses ManifestDataExtractor plus GradleDataExtractor plus CodeComponent analysis.
@@ -45,11 +46,14 @@ public class StructuredDocumentationGenerator {
         Map<String, String> sections = new LinkedHashMap<>();
         
         sections.put("Project Overview", generateOverviewSection());
-        sections.put("Technical Stack & Architecture", generateTechStackSection());
-        sections.put("App Configuration", generateConfigSection());
-        sections.put("Key Modules & Components", generateModulesSection());
-        sections.put("Data Models", generateDataModelsSection());
+        sections.put("Technical Stack", generateTechStackSection());
+        sections.put("Class Roles & Responsibilities", generateClassRolesSection());
+        sections.put("Dependency Injection Graph", generateDependencyGraphSection());
         sections.put("Navigation Flow", generateNavigationSection());
+        sections.put("Data Flow Architecture", generateDataFlowSection());
+        sections.put("API & Network Layer", generateApiSection());
+        sections.put("App Configuration", generateConfigSection());
+        sections.put("Data Models", generateDataModelsSection());
         
         return sections;
     }
@@ -69,32 +73,28 @@ public class StructuredDocumentationGenerator {
             packageName = gradleExtractor.getApplicationId();
         }
         
-        sb.append("**").append(appName).append("** is an Android application.\n\n");
-        
-        // AI-Enhanced Summary
         if (aiService != null && aiService.isReady()) {
             try {
-                // We ask the AI purely for a high-level summary here based on what we know
-                String context = "Project: " + appName + "\nPackage: " + packageName + "\nComponents: " + 
-                                 (analysisResult != null ? analysisResult.getComponents().size() : 0) + " classes.";
-                String prompt = "Write a clear, professional 1-paragraph summary for the documentation of this Android project. " +
-                                "Describe it as a modern Android application." + 
-                                (gradleExtractor != null ? " It uses " + gradleExtractor.getUiFramework() + "." : "");
-                                
-                // Note: In a real async flow we'd await this, but here we might be blocking or this method 
-                // is called from a background thread. MainController seems to call this.
-                // For safety/speed, we might need to rely on pre-computed insights, but let's try a direct simple call:
-                // String aiSummary = aiService.analyzeCode(context, prompt); // This might block
-                // For now, let's just add a placeholder if we haven't pre-computed it, 
-                // BUT MainController has 'aiGeneratedSummary'.
-                // actually, this class doesn't store the AI result from MainController.
-                // We will skip direct AI call here to avoid blocking UI if running on FX thread.
-                // Instead, we trust the caller to have enhanced it, OR we just provide better static text.
+                String componentsSummary = analysisResult.getComponents().stream()
+                    .limit(30)
+                    .map(c -> c.getName())
+                    .collect(Collectors.joining(", "));
+                    
+                String context = "Project: " + appName + "\nPackage: " + packageName + "\nComponents: " + componentsSummary;
+                context += "\nLibraries: " + gradleExtractor.getDependencies().stream().map(Object::toString).collect(Collectors.joining(", "));
+                
+                String aiSummary = aiService.analyzeCode(context, "doc_overview");
+                if (aiSummary != null && !aiSummary.isEmpty()) {
+                    sb.append(aiSummary).append("\n\n");
+                }
             } catch (Exception e) {
-                // ignore
+                logger.error("AI Overview generation failed", e);
             }
+        } else {
+             sb.append("**").append(appName).append("** is an Android application.\n\n");
         }
 
+        sb.append("### Project Metadata\n");
         sb.append("| Property | Value |\n");
         sb.append("|----------|-------|\n");
         sb.append("| **Package Name** | `").append(packageName).append("` |\n");
@@ -135,7 +135,20 @@ public class StructuredDocumentationGenerator {
             return sb.toString();
         }
         
-        // Core Technologies
+        if (aiService != null && aiService.isReady()) {
+             try {
+                String dependencies = gradleExtractor.getDependencies().stream().map(Object::toString).collect(Collectors.joining("\n"));
+                String aiTech = aiService.analyzeCode(dependencies, "doc_tech_stack");
+                if (aiTech != null && !aiTech.isEmpty()) {
+                    sb.append(aiTech).append("\n\n");
+                    return sb.toString();
+                }
+            } catch (Exception e) {
+                logger.error("AI Tech Stack generation failed", e);
+            }
+        }
+        
+        // Fallback to manual generation
         sb.append("### Core Technologies\n\n");
         sb.append("| Technology | Details |\n");
         sb.append("|------------|--------|\n");
@@ -327,7 +340,120 @@ public class StructuredDocumentationGenerator {
     }
     
     /**
-     * Section 6: Navigation Flow
+     * Section: Class Roles & Responsibilities
+     */
+    private String generateClassRolesSection() {
+        if (aiService == null || !aiService.isReady()) {
+            // Fallback to old module section if AI not ready
+             return generateModulesSection();
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        try {
+            List<CodeComponent> importantComponents = analysisResult.getComponents().stream()
+                .filter(c -> !c.getName().contains("Test") && !c.getName().startsWith("BuildConfig"))
+                .sorted((c1, c2) -> Integer.compare(c2.getLinesOfCode(), c1.getLinesOfCode())) // Sort by size
+                .limit(10) // Limit to top 10 most complex classes for detailed analysis
+                .collect(Collectors.toList());
+            
+            StringBuilder codeSummary = new StringBuilder();
+            for (CodeComponent comp : importantComponents) {
+                codeSummary.append("\nClass: ").append(comp.getName())
+                    .append("\nMethods: ").append(comp.getMethods().stream().map(m -> m.getName()).limit(5).collect(Collectors.joining(", ")))
+                    .append("\n");
+            }
+            
+            String aiResponse = aiService.analyzeCode(codeSummary.toString(), "doc_class_details");
+            if (aiResponse != null) {
+                sb.append(aiResponse);
+            }
+        } catch (Exception e) {
+            sb.append("*Error generating class roles: ").append(e.getMessage()).append("*\n");
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Section: Dependency Injection Graph
+     */
+    private String generateDependencyGraphSection() {
+        if (aiService == null || !aiService.isReady()) {
+            return "*AI model required for dependency graph generation*\n";
+        }
+        
+        try {
+            // Filter for DI related components (Modules, Components, etc)
+            String diContext = analysisResult.getComponents().stream()
+                .filter(c -> c.getAnnotations().stream().anyMatch(a -> a.contains("Module") || a.contains("Component") || a.contains("Inject") || a.contains("Provides")))
+                .map(c -> "Class: " + c.getName() + " Annotations: " + c.getAnnotations())
+                .limit(20)
+                .collect(Collectors.joining("\n"));
+                
+             if (diContext.isEmpty()) {
+                return "*No Dependency Injection components detected*\n";
+             }
+             
+             return aiService.analyzeCode(diContext, "doc_di_graph");
+        } catch (Exception e) {
+            return "*Error analyzing DI graph: " + e.getMessage() + "*\n";
+        }
+    }
+
+    /**
+     * Section: Data Flow Architecture
+     */
+    private String generateDataFlowSection() {
+         if (aiService == null || !aiService.isReady()) {
+            return "*AI model required for data flow analysis*\n";
+        }
+        
+        try {
+            // Gather key components from different layers
+            String context = analysisResult.getComponents().stream()
+                .filter(c -> c.getName().endsWith("Repository") || c.getName().endsWith("ViewModel") || c.getName().endsWith("Activity"))
+                .map(c -> c.getName())
+                .limit(15)
+                .collect(Collectors.joining(", "));
+                
+            return aiService.analyzeCode("Components: " + context, "doc_data_flow");
+        } catch (Exception e) {
+            return "*Error analyzing data flow: " + e.getMessage() + "*\n";
+        }
+    }
+    
+    /**
+     * Section: API & Network Layer
+     */
+    private String generateApiSection() {
+         if (aiService == null || !aiService.isReady()) {
+            return "*AI model required for API analysis*\n";
+        }
+        
+        try {
+             String context = analysisResult.getComponents().stream()
+                .filter(c -> c.getName().endsWith("Service") || c.getName().endsWith("Api") || c.getAnnotations().stream().anyMatch(a -> a.contains("GET") || a.contains("POST")))
+                 // Get method signatures for APIs
+                .map(c -> {
+                    String methods = c.getMethods().stream()
+                        .filter(m -> m.getAnnotations().stream().anyMatch(a -> a.contains("GET") || a.contains("POST") || a.contains("PUT")))
+                        .map(m -> m.getName() + " " + m.getAnnotations())
+                        .collect(Collectors.joining("; "));
+                    return "Interface " + c.getName() + ": " + methods;
+                })
+                .collect(Collectors.joining("\n"));
+                
+            if (context.isEmpty()) {
+                 return "*No explicit API interfaces detected via Retrofit annotations*\n";
+            }
+            
+            return aiService.analyzeCode(context, "doc_apis");
+        } catch (Exception e) {
+            return "*Error analyzing APIs: " + e.getMessage() + "*\n";
+        }
+    }
+
+    /**
+     * Navigation Flow (Manual fallback / Existing)
      */
     private String generateNavigationSection() {
         StringBuilder sb = new StringBuilder();
@@ -337,15 +463,16 @@ public class StructuredDocumentationGenerator {
             return "*No navigation flows detected*\n";
         }
         
-        sb.append("```\n");
+        sb.append("```mermaid\ngraph TD\n");
         for (NavigationFlow flow : analysisResult.getNavigationFlows()) {
-            sb.append(flow.getSourceScreenId()).append(" → ").append(flow.getTargetScreenId());
+            sb.append("  ").append(flow.getSourceScreenId()).append(" --> ").append(flow.getTargetScreenId());
             if (flow.getNavigationType() != null) {
-                sb.append(" (").append(flow.getNavigationType().name()).append(")");
+                sb.append(" : ").append(flow.getNavigationType().name());
             }
             sb.append("\n");
         }
         sb.append("```\n");
+        sb.append("\n*Diagram shows navigation paths between screens*");
         
         return sb.toString();
     }
@@ -353,40 +480,40 @@ public class StructuredDocumentationGenerator {
     // Helper methods
     
     private String getAndroidVersion(String api) {
-        return switch (api) {
-            case "21" -> "5.0";
-            case "23" -> "6.0";
-            case "24" -> "7.0";
-            case "26" -> "8.0";
-            case "28" -> "9.0";
-            case "29" -> "10";
-            case "30" -> "11";
-            case "31" -> "12";
-            case "32" -> "12L";
-            case "33" -> "13";
-            case "34" -> "14";
-            case "35" -> "15";
-            default -> api;
-        };
+        switch (api) {
+            case "21": return "5.0";
+            case "23": return "6.0";
+            case "24": return "7.0";
+            case "26": return "8.0";
+            case "28": return "9.0";
+            case "29": return "10";
+            case "30": return "11";
+            case "31": return "12";
+            case "32": return "12L";
+            case "33": return "13";
+            case "34": return "14";
+            case "35": return "15";
+            default: return api;
+        }
     }
     
     private String getPermissionPurpose(String perm) {
-        return switch (perm.toUpperCase()) {
-            case "INTERNET" -> "Network/API communication";
-            case "ACCESS_NETWORK_STATE" -> "Check connectivity";
-            case "ACCESS_WIFI_STATE" -> "Check Wi-Fi status";
-            case "CAMERA" -> "Take photos/videos";
-            case "READ_EXTERNAL_STORAGE" -> "Read files";
-            case "WRITE_EXTERNAL_STORAGE" -> "Save files";
-            case "ACCESS_FINE_LOCATION" -> "GPS location";
-            case "ACCESS_COARSE_LOCATION" -> "Approximate location";
-            case "RECORD_AUDIO" -> "Audio recording";
-            case "READ_CONTACTS" -> "Access contacts";
-            case "VIBRATE" -> "Vibration feedback";
-            case "RECEIVE_BOOT_COMPLETED" -> "Auto-start on boot";
-            case "POST_NOTIFICATIONS" -> "Show notifications";
-            default -> "Required for app functionality";
-        };
+        switch (perm.toUpperCase()) {
+            case "INTERNET": return "Network/API communication";
+            case "ACCESS_NETWORK_STATE": return "Check connectivity";
+            case "ACCESS_WIFI_STATE": return "Check Wi-Fi status";
+            case "CAMERA": return "Take photos/videos";
+            case "READ_EXTERNAL_STORAGE": return "Read files";
+            case "WRITE_EXTERNAL_STORAGE": return "Save files";
+            case "ACCESS_FINE_LOCATION": return "GPS location";
+            case "ACCESS_COARSE_LOCATION": return "Approximate location";
+            case "RECORD_AUDIO": return "Audio recording";
+            case "READ_CONTACTS": return "Access contacts";
+            case "VIBRATE": return "Vibration feedback";
+            case "RECEIVE_BOOT_COMPLETED": return "Auto-start on boot";
+            case "POST_NOTIFICATIONS": return "Show notifications";
+            default: return "Required for app functionality";
+        }
     }
     
     private String inferActivityPurpose(String name) {

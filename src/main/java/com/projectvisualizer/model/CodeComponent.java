@@ -12,6 +12,10 @@ public class CodeComponent {
     private String layer;
     private String extendsClass;
     private List<String> implementsList;
+    private String codeSnippet;
+    private int linesOfCode;
+    
+    // Lists
     private List<String> annotations;
     private List<CodeField> fields;
     private List<CodeComponent> intents;
@@ -22,7 +26,6 @@ public class CodeComponent {
     private List<String> layoutFiles;
     private List<NavigationDestination> navigationDestinations;
     private String fileExtension;
-    private String codeSnippet;
 
 
 
@@ -106,6 +109,9 @@ public class CodeComponent {
 
     public String getExtendsClass() { return extendsClass; }
     public void setExtendsClass(String extendsClass) { this.extendsClass = extendsClass; }
+
+    public int getLinesOfCode() { return linesOfCode; }
+    public void setLinesOfCode(int linesOfCode) { this.linesOfCode = linesOfCode; }
 
     public String getCodeSnippet() {
         return codeSnippet;

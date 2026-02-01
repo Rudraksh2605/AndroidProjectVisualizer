@@ -40,3 +40,19 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Logs ###
+*_log.txt
+debug_session_log*.txt
+*.log
+
+### Binaries ###
+*.dll
+*.exe
+*.so
+*.dylib
+
+### Models ###
+models/
+*.gguf
+*.bin

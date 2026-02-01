@@ -212,31 +212,37 @@
                 </Tab>
 
                 <Tab text="PlantUML Preview" fx:id="plantUMLImageTab" styleClass="main-tab">
-                    <VBox spacing="0">
+                    <VBox spacing="0" VBox.vgrow="ALWAYS">
                         <HBox styleClass="preview-toolbar" alignment="CENTER_LEFT" spacing="8">
                             <Button text="Zoom In" styleClass="action-btn" onAction="#handleZoomInPlantUML"/>
                             <Button text="Zoom Out" styleClass="action-btn" onAction="#handleZoomOutPlantUML"/>
                             <Button text="Reset" styleClass="action-btn" onAction="#handleResetZoomPlantUML"/>
+                            <Button text="Fit to View" styleClass="action-btn" onAction="#handleFitPlantUMLToView"/>
                             <Region HBox.hgrow="ALWAYS"/>
                             <Button text="Export Image" styleClass="primary-btn" onAction="#handleExportPlantUMLImage"/>
                         </HBox>
-                        <ScrollPane VBox.vgrow="ALWAYS" pannable="true">
-                            <StackPane><ImageView fx:id="plantUMLImageView"/></StackPane>
+                        <ScrollPane fx:id="plantUMLScrollPane" VBox.vgrow="ALWAYS" pannable="true" fitToHeight="false" fitToWidth="false">
+                            <StackPane fx:id="plantUMLImageContainer" style="-fx-min-width: 100; -fx-min-height: 100;">
+                                <ImageView fx:id="plantUMLImageView" preserveRatio="true"/>
+                            </StackPane>
                         </ScrollPane>
                     </VBox>
                 </Tab>
 
                 <Tab text="Graphviz Preview" fx:id="graphvizImageTab" styleClass="main-tab">
-                    <VBox spacing="0">
+                    <VBox spacing="0" VBox.vgrow="ALWAYS">
                         <HBox styleClass="preview-toolbar" alignment="CENTER_LEFT" spacing="8">
                             <Button text="Zoom In" styleClass="action-btn" onAction="#handleZoomInGraphviz"/>
                             <Button text="Zoom Out" styleClass="action-btn" onAction="#handleZoomOutGraphviz"/>
                             <Button text="Reset" styleClass="action-btn" onAction="#handleResetZoomGraphviz"/>
+                            <Button text="Fit to View" styleClass="action-btn" onAction="#handleFitGraphvizToView"/>
                             <Region HBox.hgrow="ALWAYS"/>
                             <Button text="Export Image" styleClass="primary-btn" onAction="#handleExportGraphvizImage"/>
                         </HBox>
-                        <ScrollPane VBox.vgrow="ALWAYS" pannable="true">
-                            <StackPane><ImageView fx:id="graphvizImageView"/></StackPane>
+                        <ScrollPane fx:id="graphvizScrollPane" VBox.vgrow="ALWAYS" pannable="true" fitToHeight="false" fitToWidth="false">
+                            <StackPane fx:id="graphvizImageContainer" style="-fx-min-width: 100; -fx-min-height: 100;">
+                                <ImageView fx:id="graphvizImageView" preserveRatio="true"/>
+                            </StackPane>
                         </ScrollPane>
                     </VBox>
                 </Tab>

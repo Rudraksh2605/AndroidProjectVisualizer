@@ -34,11 +34,13 @@ public class ProjectDocumentationGenerator {
         this(analysisResult, projectName, null, null);
     }
 
-    public ProjectDocumentationGenerator(AnalysisResult analysisResult, String projectName, Phi2InferenceService aiService) {
+    public ProjectDocumentationGenerator(AnalysisResult analysisResult, String projectName,
+            Phi2InferenceService aiService) {
         this(analysisResult, projectName, null, aiService);
     }
 
-    public ProjectDocumentationGenerator(AnalysisResult analysisResult, String projectName, String projectPath, Phi2InferenceService aiService) {
+    public ProjectDocumentationGenerator(AnalysisResult analysisResult, String projectName, String projectPath,
+            Phi2InferenceService aiService) {
         this.analysisResult = analysisResult;
         this.projectName = projectName != null ? projectName : "Android Project";
         this.projectPath = projectPath;
@@ -60,12 +62,12 @@ public class ProjectDocumentationGenerator {
         List<VBox> sections = new ArrayList<>();
 
         sections.add(createHeroSection());
-        
+
         // Add AI summary section if available
         if (isAIAvailable()) {
             sections.add(createAISummarySection());
         }
-        
+
         sections.add(createAppOverviewSection());
         sections.add(createScreensSection());
         sections.add(createUseCasesSection());
@@ -79,77 +81,94 @@ public class ProjectDocumentationGenerator {
     /**
      * Generates documentation with AI-enhanced content asynchronously.
      * Uses documentation-specific prompts for comprehensive AI analysis.
-     * @param container The VBox container to populate with documentation
+     * 
+     * @param container      The VBox container to populate with documentation
      * @param statusCallback Optional callback for status updates
      */
     /**
      * Generates documentation with STRUCTURED content from manifest/gradle data.
      * Uses StructuredDocumentationGenerator for professional formatted output.
      * AI is used only to enhance descriptions where available.
-     * @param container The VBox container to populate with documentation
+     * 
+     * @param container      The VBox container to populate with documentation
      * @param statusCallback Optional callback for status updates
      */
     public void generateDocumentationWithAI(VBox container, java.util.function.Consumer<String> statusCallback) {
         if (statusCallback != null) {
-            statusCallback.accept("📊 Generating structured documentation...");
+            statusCallback.accept("📊 Generating structured documentation in background...");
         }
 
-        // Create structured documentation generator
-        StructuredDocumentationGenerator structuredGen = new StructuredDocumentationGenerator(
-            projectPath, projectName, analysisResult, aiService);
-        
-        // Generate structured documentation sections
-        Map<String, String> sections = structuredGen.generateDocumentation();
-        
-        // Add Hero section first
-        container.getChildren().add(createHeroSection());
-        
-        // Add each structured section as a formatted VBox
-        for (Map.Entry<String, String> entry : sections.entrySet()) {
-            VBox sectionBox = createStructuredSection(entry.getKey(), entry.getValue());
-            container.getChildren().add(sectionBox);
-        }
-        
-        // If AI is available, add AI enhancement section at the end
-        if (isAIAvailable()) {
-            if (statusCallback != null) {
-                statusCallback.accept("🤖 AI: Generating additional insights...");
-            }
-            
-            // Add AI loading placeholder
-            VBox aiLoadingSection = createAILoadingSection();
-            container.getChildren().add(aiLoadingSection);
-            
-            String codeContext = buildRichCodeContext();
-            
-            CompletableFuture.runAsync(() -> {
-                try {
-                    aiGeneratedSummary = aiService.analyzeCode(codeContext, "doc_overview");
-                    
-                    Platform.runLater(() -> {
-                        container.getChildren().remove(aiLoadingSection);
-                        container.getChildren().add(createPureAIOverviewSection());
-                        
-                        if (statusCallback != null) {
-                            statusCallback.accept("✨ Professional documentation generated");
+        // Run ALL heavy processing in background thread
+        CompletableFuture.runAsync(() -> {
+            // Create structured documentation generator (parses manifest/gradle - HEAVY)
+            StructuredDocumentationGenerator structuredGen = new StructuredDocumentationGenerator(
+                    projectPath, projectName, analysisResult, aiService);
+
+            // Generate structured documentation sections (AI calls - HEAVY)
+            Map<String, String> sections = structuredGen.generateDocumentation();
+
+            // Build code context for AI (file I/O - HEAVY)
+            String codeContext = isAIAvailable() ? buildRichCodeContext() : null;
+
+            // Now update UI on main thread
+            Platform.runLater(() -> {
+                // Add Hero section first
+                container.getChildren().add(createHeroSection());
+
+                // Add each structured section as a formatted VBox
+                for (Map.Entry<String, String> entry : sections.entrySet()) {
+                    VBox sectionBox = createStructuredSection(entry.getKey(), entry.getValue());
+                    container.getChildren().add(sectionBox);
+                }
+
+                // If AI is available, add AI enhancement section at the end
+                if (isAIAvailable() && codeContext != null) {
+                    if (statusCallback != null) {
+                        statusCallback.accept("🤖 AI: Generating additional insights...");
+                    }
+
+                    // Add AI loading placeholder
+                    VBox aiLoadingSection = createAILoadingSection();
+                    container.getChildren().add(aiLoadingSection);
+
+                    // AI generation runs in yet another background thread
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            aiGeneratedSummary = aiService.analyzeCode(codeContext, "doc_overview");
+
+                            Platform.runLater(() -> {
+                                container.getChildren().remove(aiLoadingSection);
+                                container.getChildren().add(createPureAIOverviewSection());
+
+                                if (statusCallback != null) {
+                                    statusCallback.accept("✨ Professional documentation generated");
+                                }
+                            });
+                        } catch (Exception e) {
+                            Platform.runLater(() -> {
+                                container.getChildren().remove(aiLoadingSection);
+                                if (statusCallback != null) {
+                                    statusCallback.accept("📊 Documentation generated (AI enhancement unavailable)");
+                                }
+                            });
                         }
                     });
-                } catch (Exception e) {
-                    Platform.runLater(() -> {
-                        container.getChildren().remove(aiLoadingSection);
-                        if (statusCallback != null) {
-                            statusCallback.accept("📊 Documentation generated (AI enhancement unavailable)");
-                        }
-                    });
+                } else {
+                    if (statusCallback != null) {
+                        statusCallback.accept("📊 Professional documentation generated");
+                    }
                 }
             });
-        } else {
-            if (statusCallback != null) {
-                statusCallback.accept("📊 Professional documentation generated");
-            }
-        }
+        }).exceptionally(ex -> {
+            Platform.runLater(() -> {
+                if (statusCallback != null) {
+                    statusCallback.accept("❌ Documentation generation failed: " + ex.getMessage());
+                }
+            });
+            return null;
+        });
     }
-    
+
     /**
      * Creates a structured section with markdown-like rendering.
      */
@@ -157,27 +176,27 @@ public class ProjectDocumentationGenerator {
         VBox section = new VBox(8);
         section.getStyleClass().add("doc-section");
         section.setStyle("-fx-padding: 16; -fx-background-color: rgba(30, 30, 46, 0.6); -fx-background-radius: 8;");
-        
+
         // Section header
         Label header = new Label("📄 " + title);
         header.getStyleClass().add("doc-section-header");
         header.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #cdd6f4;");
-        
+
         // Content - parse markdown-style content into Labels
         VBox contentBox = new VBox(6);
         String[] lines = content.split("\n");
-        
+
         for (String line : lines) {
             Label lineLabel = createFormattedLabel(line);
             if (lineLabel != null) {
                 contentBox.getChildren().add(lineLabel);
             }
         }
-        
+
         section.getChildren().addAll(header, contentBox);
         return section;
     }
-    
+
     /**
      * Creates a formatted label from markdown-style text.
      */
@@ -185,11 +204,11 @@ public class ProjectDocumentationGenerator {
         if (line == null || line.trim().isEmpty()) {
             return null;
         }
-        
+
         Label label = new Label();
         label.setWrapText(true);
         label.setStyle("-fx-text-fill: #bac2de;");
-        
+
         // Handle different markdown elements
         if (line.startsWith("### ")) {
             label.setText(line.substring(4));
@@ -209,10 +228,9 @@ public class ProjectDocumentationGenerator {
         } else {
             label.setText(line);
         }
-        
+
         return label;
     }
-
 
     /**
      * Creates PURE AI overview section without pattern-based content.
@@ -226,10 +244,11 @@ public class ProjectDocumentationGenerator {
 
         Label badge = new Label("🤖 Phi-2 AI Analysis");
         badge.getStyleClass().add("doc-badge");
-        badge.setStyle("-fx-background-color: linear-gradient(135deg, #8b5cf6, #6366f1); -fx-text-fill: white; -fx-padding: 6 12;");
+        badge.setStyle(
+                "-fx-background-color: linear-gradient(135deg, #8b5cf6, #6366f1); -fx-text-fill: white; -fx-padding: 6 12;");
 
-        String content = aiGeneratedSummary != null ? aiGeneratedSummary : 
-                "Unable to generate overview. Please ensure AI model is loaded.";
+        String content = aiGeneratedSummary != null ? aiGeneratedSummary
+                : "Unable to generate overview. Please ensure AI model is loaded.";
 
         Label text = new Label(content);
         text.getStyleClass().add("doc-text");
@@ -254,10 +273,11 @@ public class ProjectDocumentationGenerator {
 
         Label badge = new Label("🤖 AI Feature Detection");
         badge.getStyleClass().add("doc-badge");
-        badge.setStyle("-fx-background-color: linear-gradient(135deg, #10b981, #059669); -fx-text-fill: white; -fx-padding: 6 12;");
+        badge.setStyle(
+                "-fx-background-color: linear-gradient(135deg, #10b981, #059669); -fx-text-fill: white; -fx-padding: 6 12;");
 
-        String content = aiGeneratedUseCases != null ? aiGeneratedUseCases : 
-                "Unable to detect features. Please ensure AI model is loaded.";
+        String content = aiGeneratedUseCases != null ? aiGeneratedUseCases
+                : "Unable to detect features. Please ensure AI model is loaded.";
 
         Label text = new Label(content);
         text.getStyleClass().add("doc-text");
@@ -282,10 +302,11 @@ public class ProjectDocumentationGenerator {
 
         Label badge = new Label("🤖 AI Architecture Analysis");
         badge.getStyleClass().add("doc-badge");
-        badge.setStyle("-fx-background-color: linear-gradient(135deg, #f59e0b, #d97706); -fx-text-fill: white; -fx-padding: 6 12;");
+        badge.setStyle(
+                "-fx-background-color: linear-gradient(135deg, #f59e0b, #d97706); -fx-text-fill: white; -fx-padding: 6 12;");
 
-        String content = aiGeneratedArchitecture != null ? aiGeneratedArchitecture : 
-                "Unable to analyze architecture. Please ensure AI model is loaded.";
+        String content = aiGeneratedArchitecture != null ? aiGeneratedArchitecture
+                : "Unable to analyze architecture. Please ensure AI model is loaded.";
 
         Label text = new Label(content);
         text.getStyleClass().add("doc-text");
@@ -305,17 +326,17 @@ public class ProjectDocumentationGenerator {
      */
     private String buildRichCodeContext() {
         List<CodeComponent> components = getComponents();
-        
+
         // If we have SourceCodeReader, use it to get real source code
         if (sourceCodeReader != null) {
             return sourceCodeReader.buildFullCodeContext(components, projectName);
         }
-        
+
         // Fallback: build context from metadata only (less useful for AI)
         StringBuilder context = new StringBuilder();
         context.append("=== PROJECT: ").append(projectName).append(" ===\n\n");
         context.append("NOTE: Reading from metadata only (project path not provided)\n\n");
-        
+
         // Group components by type
         Map<String, List<CodeComponent>> byType = new LinkedHashMap<>();
         for (CodeComponent comp : components) {
@@ -325,30 +346,33 @@ public class ProjectDocumentationGenerator {
 
         // Describe each component type
         for (Map.Entry<String, List<CodeComponent>> entry : byType.entrySet()) {
-            context.append("--- ").append(entry.getKey()).append(" (").append(entry.getValue().size()).append(") ---\n");
+            context.append("--- ").append(entry.getKey()).append(" (").append(entry.getValue().size())
+                    .append(") ---\n");
             for (CodeComponent comp : entry.getValue()) {
                 context.append("\n[").append(comp.getName()).append("]");
                 if (comp.getLanguage() != null) {
                     context.append(" (").append(comp.getLanguage()).append(")");
                 }
                 context.append("\n");
-                
+
                 if (comp.getFilePath() != null) {
                     context.append("File: ").append(comp.getFilePath()).append("\n");
                 }
-                
+
                 if (comp.getAnnotations() != null && !comp.getAnnotations().isEmpty()) {
                     context.append("Annotations: ").append(String.join(", ", comp.getAnnotations())).append("\n");
                 }
-                
+
                 List<CodeMethod> methods = comp.getMethods();
                 if (methods != null && !methods.isEmpty()) {
                     context.append("Methods: ");
                     for (int i = 0; i < Math.min(methods.size(), 10); i++) {
                         context.append(methods.get(i).getName()).append("()");
-                        if (i < Math.min(methods.size(), 10) - 1) context.append(", ");
+                        if (i < Math.min(methods.size(), 10) - 1)
+                            context.append(", ");
                     }
-                    if (methods.size() > 10) context.append("... (").append(methods.size() - 10).append(" more)");
+                    if (methods.size() > 10)
+                        context.append("... (").append(methods.size() - 10).append(" more)");
                     context.append("\n");
                 }
             }
@@ -395,8 +419,8 @@ public class ProjectDocumentationGenerator {
         VBox section = createSection("🤖 AI-Generated Summary",
                 "Intelligent analysis by Microsoft Phi-2 LLM.");
 
-        String summary = aiGeneratedSummary != null ? aiGeneratedSummary : 
-                "AI summary not available. Load Phi-2 model to enable intelligent documentation.";
+        String summary = aiGeneratedSummary != null ? aiGeneratedSummary
+                : "AI summary not available. Load Phi-2 model to enable intelligent documentation.";
 
         VBox summaryCard = new VBox(8);
         summaryCard.getStyleClass().add("doc-card");
@@ -508,13 +532,15 @@ public class ProjectDocumentationGenerator {
         List<CodeComponent> components = getComponents();
 
         context.append("Project: ").append(projectName).append("\n\n");
-        context.append("=== Components ("+ components.size() +") ===\n");
+        context.append("=== Components (" + components.size() + ") ===\n");
 
         // Add component summaries
         for (CodeComponent comp : components) {
             context.append("- ").append(comp.getName());
-            if (comp.getType() != null) context.append(" (").append(comp.getType()).append(")");
-            if (comp.getLayer() != null) context.append(" [Layer: ").append(comp.getLayer()).append("]");
+            if (comp.getType() != null)
+                context.append(" (").append(comp.getType()).append(")");
+            if (comp.getLayer() != null)
+                context.append(" [Layer: ").append(comp.getLayer()).append("]");
             context.append("\n");
 
             // Add key methods
@@ -523,7 +549,8 @@ public class ProjectDocumentationGenerator {
                 context.append("  Methods: ");
                 for (int i = 0; i < Math.min(methods.size(), 5); i++) {
                     context.append(methods.get(i).getName());
-                    if (i < Math.min(methods.size(), 5) - 1) context.append(", ");
+                    if (i < Math.min(methods.size(), 5) - 1)
+                        context.append(", ");
                 }
                 context.append("\n");
             }
@@ -563,7 +590,7 @@ public class ProjectDocumentationGenerator {
         heroHeader.setAlignment(Pos.CENTER_LEFT);
         Label heroTitle = new Label("📋 " + projectName);
         heroTitle.getStyleClass().add("doc-hero-title");
-        
+
         Label badge = new Label("Project Documentation");
         badge.getStyleClass().add("doc-hero-version");
         heroHeader.getChildren().addAll(heroTitle, badge);
@@ -707,7 +734,7 @@ public class ProjectDocumentationGenerator {
             if (!entry.getValue().isEmpty()) {
                 VBox featureCard = new VBox(8);
                 featureCard.getStyleClass().add("doc-card");
-                
+
                 Label screenLabel = new Label("📍 " + entry.getKey());
                 screenLabel.getStyleClass().add("doc-card-title");
                 featureCard.getChildren().add(screenLabel);
@@ -737,7 +764,7 @@ public class ProjectDocumentationGenerator {
         Label title = new Label(icon + " " + process.getProcessName());
         title.getStyleClass().add("doc-card-title");
 
-        Label typeLabel = new Label("Type: " + process.getProcessType() + 
+        Label typeLabel = new Label("Type: " + process.getProcessType() +
                 " | Priority: " + process.getCriticalityLevel());
         typeLabel.getStyleClass().add("doc-text");
 
@@ -942,13 +969,12 @@ public class ProjectDocumentationGenerator {
     }
 
     private List<CodeComponent> getComponents() {
-        return analysisResult.getComponents() != null ? 
-                analysisResult.getComponents() : Collections.emptyList();
+        return analysisResult.getComponents() != null ? analysisResult.getComponents() : Collections.emptyList();
     }
 
     private Map<String, List<CodeComponent>> getCategorizedComponents() {
-        return analysisResult.getCategorizedComponents() != null ?
-                analysisResult.getCategorizedComponents() : Collections.emptyMap();
+        return analysisResult.getCategorizedComponents() != null ? analysisResult.getCategorizedComponents()
+                : Collections.emptyMap();
     }
 
     private int countByType(List<CodeComponent> components, String type) {
@@ -958,28 +984,41 @@ public class ProjectDocumentationGenerator {
     }
 
     private boolean isUIComponent(CodeComponent comp) {
-        if (comp.getType() == null) return false;
+        if (comp.getType() == null)
+            return false;
         String type = comp.getType().toLowerCase();
-        return type.contains("activity") || type.contains("fragment") || 
-               type.contains("view") || type.contains("dialog");
+        return type.contains("activity") || type.contains("fragment") ||
+                type.contains("view") || type.contains("dialog");
     }
 
     private String inferScreenPurpose(CodeComponent comp) {
         String name = comp.getName().toLowerCase();
-        
-        if (name.contains("login")) return "Handles user authentication and login flow.";
-        if (name.contains("register") || name.contains("signup")) return "Manages user registration and account creation.";
-        if (name.contains("home") || name.contains("main")) return "Main entry point and dashboard for the application.";
-        if (name.contains("profile")) return "Displays and manages user profile information.";
-        if (name.contains("settings")) return "Application settings and preferences management.";
-        if (name.contains("detail")) return "Shows detailed information for a selected item.";
-        if (name.contains("list")) return "Displays a list of items for browsing.";
-        if (name.contains("search")) return "Provides search functionality.";
-        if (name.contains("splash")) return "Initial loading screen shown on app launch.";
-        if (name.contains("onboard")) return "Guides new users through app features.";
-        if (name.contains("payment") || name.contains("checkout")) return "Handles payment and checkout process.";
-        if (name.contains("cart")) return "Shopping cart management.";
-        
+
+        if (name.contains("login"))
+            return "Handles user authentication and login flow.";
+        if (name.contains("register") || name.contains("signup"))
+            return "Manages user registration and account creation.";
+        if (name.contains("home") || name.contains("main"))
+            return "Main entry point and dashboard for the application.";
+        if (name.contains("profile"))
+            return "Displays and manages user profile information.";
+        if (name.contains("settings"))
+            return "Application settings and preferences management.";
+        if (name.contains("detail"))
+            return "Shows detailed information for a selected item.";
+        if (name.contains("list"))
+            return "Displays a list of items for browsing.";
+        if (name.contains("search"))
+            return "Provides search functionality.";
+        if (name.contains("splash"))
+            return "Initial loading screen shown on app launch.";
+        if (name.contains("onboard"))
+            return "Guides new users through app features.";
+        if (name.contains("payment") || name.contains("checkout"))
+            return "Handles payment and checkout process.";
+        if (name.contains("cart"))
+            return "Shopping cart management.";
+
         return "Screen component for " + comp.getName().replaceAll("([A-Z])", " $1").trim() + ".";
     }
 
@@ -987,12 +1026,13 @@ public class ProjectDocumentationGenerator {
         List<String> keyMethods = new ArrayList<>();
         for (CodeMethod method : methods) {
             String name = method.getName();
-            if (name.startsWith("on") || name.startsWith("handle") || 
-                name.startsWith("show") || name.startsWith("load") ||
-                name.startsWith("submit") || name.startsWith("save") ||
-                name.startsWith("delete") || name.startsWith("update")) {
+            if (name.startsWith("on") || name.startsWith("handle") ||
+                    name.startsWith("show") || name.startsWith("load") ||
+                    name.startsWith("submit") || name.startsWith("save") ||
+                    name.startsWith("delete") || name.startsWith("update")) {
                 keyMethods.add(formatMethodName(name));
-                if (keyMethods.size() >= 5) break;
+                if (keyMethods.size() >= 5)
+                    break;
             }
         }
         return keyMethods;
@@ -1004,13 +1044,14 @@ public class ProjectDocumentationGenerator {
 
     private Map<String, Set<String>> extractFeaturesFromComponents(List<CodeComponent> components) {
         Map<String, Set<String>> features = new LinkedHashMap<>();
-        
+
         for (CodeComponent comp : components) {
-            if (!isUIComponent(comp)) continue;
-            
+            if (!isUIComponent(comp))
+                continue;
+
             Set<String> screenFeatures = new LinkedHashSet<>();
             List<CodeMethod> methods = comp.getMethods();
-            
+
             if (methods != null) {
                 for (CodeMethod method : methods) {
                     String feature = methodToFeature(method.getName());
@@ -1019,74 +1060,101 @@ public class ProjectDocumentationGenerator {
                     }
                 }
             }
-            
+
             if (!screenFeatures.isEmpty()) {
                 features.put(comp.getName(), screenFeatures);
             }
         }
-        
+
         return features;
     }
 
     private String methodToFeature(String methodName) {
         String name = methodName.toLowerCase();
-        
-        if (name.contains("login") || name.contains("signin")) return "User Login";
-        if (name.contains("logout") || name.contains("signout")) return "User Logout";
-        if (name.contains("register") || name.contains("signup")) return "User Registration";
-        if (name.contains("search")) return "Search Functionality";
-        if (name.contains("share")) return "Content Sharing";
-        if (name.contains("upload")) return "File Upload";
-        if (name.contains("download")) return "File Download";
-        if (name.contains("refresh")) return "Data Refresh";
-        if (name.contains("save")) return "Save Data";
-        if (name.contains("delete") || name.contains("remove")) return "Delete Items";
-        if (name.contains("edit") || name.contains("update")) return "Edit Content";
-        if (name.contains("navigate") || name.contains("goto")) return "Navigation";
-        if (name.contains("filter")) return "Filter Data";
-        if (name.contains("sort")) return "Sort Data";
-        if (name.contains("pay") || name.contains("checkout")) return "Payment Processing";
-        if (name.contains("notification")) return "Notifications";
-        
+
+        if (name.contains("login") || name.contains("signin"))
+            return "User Login";
+        if (name.contains("logout") || name.contains("signout"))
+            return "User Logout";
+        if (name.contains("register") || name.contains("signup"))
+            return "User Registration";
+        if (name.contains("search"))
+            return "Search Functionality";
+        if (name.contains("share"))
+            return "Content Sharing";
+        if (name.contains("upload"))
+            return "File Upload";
+        if (name.contains("download"))
+            return "File Download";
+        if (name.contains("refresh"))
+            return "Data Refresh";
+        if (name.contains("save"))
+            return "Save Data";
+        if (name.contains("delete") || name.contains("remove"))
+            return "Delete Items";
+        if (name.contains("edit") || name.contains("update"))
+            return "Edit Content";
+        if (name.contains("navigate") || name.contains("goto"))
+            return "Navigation";
+        if (name.contains("filter"))
+            return "Filter Data";
+        if (name.contains("sort"))
+            return "Sort Data";
+        if (name.contains("pay") || name.contains("checkout"))
+            return "Payment Processing";
+        if (name.contains("notification"))
+            return "Notifications";
+
         return null;
     }
 
     private String getProcessIcon(BusinessProcessComponent.ProcessType type) {
-        if (type == null) return "📌";
+        if (type == null)
+            return "📌";
         switch (type) {
-            case AUTHENTICATION: return "🔐";
-            case USER_REGISTRATION: return "📝";
-            case PAYMENT: return "💳";
-            case SEARCH: return "🔍";
-            case DATA_SYNC: return "🔄";
-            case NOTIFICATION: return "🔔";
-            default: return "📌";
+            case AUTHENTICATION:
+                return "🔐";
+            case USER_REGISTRATION:
+                return "📝";
+            case PAYMENT:
+                return "💳";
+            case SEARCH:
+                return "🔍";
+            case DATA_SYNC:
+                return "🔄";
+            case NOTIFICATION:
+                return "🔔";
+            default:
+                return "📌";
         }
     }
 
     private String detectArchitecturePattern(List<CodeComponent> components) {
-        boolean hasViewModels = components.stream().anyMatch(c -> 
-            c.getType() != null && c.getType().toLowerCase().contains("viewmodel"));
-        boolean hasRepositories = components.stream().anyMatch(c -> 
-            c.getType() != null && c.getType().toLowerCase().contains("repository"));
-        boolean hasPresenters = components.stream().anyMatch(c -> 
-            c.getType() != null && c.getType().toLowerCase().contains("presenter"));
-        boolean hasUseCases = components.stream().anyMatch(c -> 
-            c.getType() != null && c.getType().toLowerCase().contains("usecase"));
+        boolean hasViewModels = components.stream()
+                .anyMatch(c -> c.getType() != null && c.getType().toLowerCase().contains("viewmodel"));
+        boolean hasRepositories = components.stream()
+                .anyMatch(c -> c.getType() != null && c.getType().toLowerCase().contains("repository"));
+        boolean hasPresenters = components.stream()
+                .anyMatch(c -> c.getType() != null && c.getType().toLowerCase().contains("presenter"));
+        boolean hasUseCases = components.stream()
+                .anyMatch(c -> c.getType() != null && c.getType().toLowerCase().contains("usecase"));
 
         if (hasViewModels && hasRepositories) {
-            if (hasUseCases) return "Clean Architecture with MVVM";
+            if (hasUseCases)
+                return "Clean Architecture with MVVM";
             return "MVVM (Model-View-ViewModel)";
         }
-        if (hasPresenters) return "MVP (Model-View-Presenter)";
-        if (hasRepositories) return "Repository Pattern";
-        
+        if (hasPresenters)
+            return "MVP (Model-View-Presenter)";
+        if (hasRepositories)
+            return "Repository Pattern";
+
         return null;
     }
 
     private Set<String> detectFrameworks(List<CodeComponent> components) {
         Set<String> frameworks = new LinkedHashSet<>();
-        
+
         for (CodeComponent comp : components) {
             List<String> annotations = comp.getAnnotations();
             if (annotations != null) {
@@ -1105,7 +1173,7 @@ public class ProjectDocumentationGenerator {
                     }
                 }
             }
-            
+
             if (comp.isCoroutineUsage()) {
                 frameworks.add("Kotlin Coroutines");
             }
@@ -1116,7 +1184,7 @@ public class ProjectDocumentationGenerator {
                 frameworks.add("DataBinding");
             }
         }
-        
+
         return frameworks;
     }
 }

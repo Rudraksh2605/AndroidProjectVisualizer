@@ -33,7 +33,7 @@ dependencies {
 
     // AST Analysis Utilities
     implementation("org.eclipse.jdt:org.eclipse.jdt.core:3.37.0")
-    implementation("org.eclipse.platform:org.eclipse.core.runtime:3.21.100")
+    implementation("org.eclipse.platform:org.eclipse.core.runtime:3.30.0")
 
     // UI and Controls
     implementation("org.controlsfx:controlsfx:11.1.2")
@@ -66,7 +66,7 @@ dependencies {
     implementation("com.itextpdf:itext7-core:7.2.5")
 
     // LLM Inference - llama.java for Phi-2 GGUF model with GPU support
-    implementation("de.kherud:llama:3.2.1")
+    implementation("de.kherud:llama:4.1.0")
 
     testImplementation(platform("org.junit:junit-bom:5.10.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -127,4 +127,9 @@ tasks.register<Copy>("copyNativeLibs") {
 // Ensure models directory exists during build
 tasks.named("processResources") {
     dependsOn("createModelDir")
+}
+
+tasks.named<JavaExec>("run") {
+    environment("PATH", "${project.file("natives").absolutePath}${File.pathSeparator}${System.getenv("PATH")}")
+    systemProperty("de.kherud.llama.lib.path", project.file("natives").absolutePath)
 }

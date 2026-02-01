@@ -13,6 +13,10 @@ public class Main extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        // Set path for custom native libraries (GPU support)
+        String nativesPath = java.nio.file.Paths.get("natives").toAbsolutePath().toString();
+        System.setProperty("de.kherud.llama.lib.path", nativesPath);
+
         Parent root = FXMLLoader.load(Objects.requireNonNull(
                 getClass().getResource("/fxml/main.fxml")));
 

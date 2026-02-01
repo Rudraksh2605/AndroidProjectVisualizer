@@ -6,7 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="96e75262-d0be-4199-aeba-7ace1778131c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AI_SETUP.md" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/build.gradle.kts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/llama.log" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/Main.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/ai/Phi2Config.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/ai/Phi2Config.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/ai/Phi2InferenceService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/ai/Phi2InferenceService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeComponent.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeComponent.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeMethod.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/model/CodeMethod.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/StructuredDocumentationGenerator.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/services/StructuredDocumentationGenerator.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/UseCaseDiagramGenerator.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/projectvisualizer/visualization/UseCaseDiagramGenerator.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -265,6 +273,10 @@
       <workItem from="1767548034651" duration="6300000" />
       <workItem from="1767772463041" duration="1317000" />
       <workItem from="1767900831202" duration="233000" />
+      <workItem from="1769611041134" duration="103000" />
+      <workItem from="1769614910067" duration="773000" />
+      <workItem from="1769621353473" duration="527000" />
+      <workItem from="1769703927364" duration="77000" />
     </task>
     <servers />
   </component>

@@ -8,11 +8,13 @@ import com.projectvisualizer.services.ProjectAnalysisService;
 import com.projectvisualizer.visualization.GraphManager;
 import com.projectvisualizer.visualization.GraphNode;
 import javafx.concurrent.Task;
+import java.util.concurrent.CompletableFuture;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -60,40 +62,72 @@ import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.io.font.constants.StandardFonts;
 import com.itextpdf.layout.element.Text;
 
-
-
 public class MainController implements Initializable {
 
-    @FXML private VBox mainContainer;
-    @FXML private TreeView<String> projectTreeView;
-    @FXML private ScrollPane diagramScrollPane;
-    @FXML private TabPane visualizationTabPane;
-    @FXML private ListView<String> componentsListView;
-    @FXML private TextArea plantUMLTextArea;
-    @FXML private TextArea graphvizTextArea;
-    @FXML private VBox statisticsContainer;
+    @FXML
+    private VBox mainContainer;
+    @FXML
+    private TreeView<String> projectTreeView;
+    @FXML
+    private ScrollPane diagramScrollPane;
+    @FXML
+    private TabPane visualizationTabPane;
+    @FXML
+    private ListView<String> componentsListView;
+    @FXML
+    private TextArea plantUMLTextArea;
+    @FXML
+    private TextArea graphvizTextArea;
+    @FXML
+    private VBox statisticsContainer;
 
-    @FXML private Tab plantUMLImageTab;
-    @FXML private Tab graphvizImageTab;
-    @FXML private Tab documentationTab;
-    @FXML private Tab projectDocsTab;
-    @FXML private ImageView plantUMLImageView;
-    @FXML private ImageView graphvizImageView;
-    @FXML private VBox documentationContainer;
-    @FXML private VBox projectDocsContainer;
-    @FXML private Label projectDocsStatusLabel;
+    @FXML
+    private Tab plantUMLImageTab;
+    @FXML
+    private Tab graphvizImageTab;
+    @FXML
+    private Tab documentationTab;
+    @FXML
+    private Tab projectDocsTab;
+    @FXML
+    private ImageView plantUMLImageView;
+    @FXML
+    private ImageView graphvizImageView;
+    @FXML
+    private ScrollPane plantUMLScrollPane;
+    @FXML
+    private ScrollPane graphvizScrollPane;
+    @FXML
+    private StackPane plantUMLImageContainer;
+    @FXML
+    private StackPane graphvizImageContainer;
+    @FXML
+    private VBox documentationContainer;
+    @FXML
+    private VBox projectDocsContainer;
+    @FXML
+    private Label projectDocsStatusLabel;
 
-    @FXML private Label zoomLabel;
+    @FXML
+    private Label zoomLabel;
 
-    @FXML private Label statusLabel;
-    @FXML private Label projectInfoLabel;
-    @FXML private Label memoryLabel;
-    @FXML private Label statusZoomLabel;
-    @FXML private Label progressLabel;
-    @FXML private HBox progressContainer;
+    @FXML
+    private Label statusLabel;
+    @FXML
+    private Label projectInfoLabel;
+    @FXML
+    private Label memoryLabel;
+    @FXML
+    private Label statusZoomLabel;
+    @FXML
+    private Label progressLabel;
+    @FXML
+    private HBox progressContainer;
 
-    @FXML private MenuButton viewModeMenuButton;
-    @FXML private Label categoryStatsLabel;
+    @FXML
+    private MenuButton viewModeMenuButton;
+    @FXML
+    private Label categoryStatsLabel;
 
     private GraphManager graphManager;
     private Pane graphCanvas;
@@ -108,6 +142,9 @@ public class MainController implements Initializable {
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
+        // Increase PlantUML rendering limit to prevent clipping of large diagrams
+        System.setProperty("PLANTUML_LIMIT_SIZE", "16384");
+
         initializeGraphCanvas();
         initializeTreeView();
         initializeEventHandlers();
@@ -115,19 +152,33 @@ public class MainController implements Initializable {
         initializeViewModeMenu();
         initializeDocumentation();
         loadSampleData();
-        initializeAI(); // Auto-load Phi-2 model
+        // initializeAI(); // MOVED: Auto-load disabled to prevent startup freeze.
+        // Triggered manually or lazily.
+
+        // Delay AI loading to ensure UI is responsive first
+        javafx.application.Platform.runLater(() -> {
+            // Further delay to let other UI components settle
+            new Thread(() -> {
+                try {
+                    Thread.sleep(2000); // 2 second delay
+                    javafx.application.Platform.runLater(this::initializeAI);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+            }).start();
+        });
     }
-    
+
     /**
      * Initializes and auto-loads the Phi-2 AI model on startup.
      */
     private void initializeAI() {
-        com.projectvisualizer.ai.ProjectUnderstandingService aiService = 
-            com.projectvisualizer.ai.ProjectUnderstandingService.getInstance();
-        
+        com.projectvisualizer.ai.ProjectUnderstandingService aiService = com.projectvisualizer.ai.ProjectUnderstandingService
+                .getInstance();
+
         if (aiService.isModelAvailable() && !aiService.isReady() && !aiService.isLoading()) {
             statusLabel.setText("🤖 Loading Phi-2 AI model...");
-            
+
             aiService.initializeAsync(progress -> {
                 javafx.application.Platform.runLater(() -> {
                     statusLabel.setText(progress);
@@ -174,8 +225,7 @@ public class MainController implements Initializable {
                 // Set initial size based on viewport
                 graphCanvas.setPrefSize(
                         Math.max(2000, viewportWidth),
-                        Math.max(2000, viewportHeight)
-                );
+                        Math.max(2000, viewportHeight));
             }
         });
 
@@ -195,16 +245,13 @@ public class MainController implements Initializable {
         // Sample files
         javaGroup.getChildren().addAll(
                 new TreeItem<>("MainActivity.java"),
-                new TreeItem<>("UserRepository.java")
-        );
+                new TreeItem<>("UserRepository.java"));
         kotlinGroup.getChildren().addAll(
                 new TreeItem<>("LoginFragment.kt"),
-                new TreeItem<>("UserViewModel.kt")
-        );
+                new TreeItem<>("UserViewModel.kt"));
         xmlGroup.getChildren().addAll(
                 new TreeItem<>("activity_main.xml"),
-                new TreeItem<>("fragment_login.xml")
-        );
+                new TreeItem<>("fragment_login.xml"));
 
         rootItem.getChildren().addAll(javaGroup, kotlinGroup, xmlGroup);
 
@@ -230,7 +277,6 @@ public class MainController implements Initializable {
         });
     }
 
-
     private void initializeEventHandlers() {
         // Tree view selection listener
         projectTreeView.getSelectionModel().selectedItemProperty().addListener(
@@ -238,8 +284,7 @@ public class MainController implements Initializable {
                     if (newValue != null && !newValue.getValue().equals("Project Structure")) {
                         handleComponentSelection(newValue);
                     }
-                }
-        );
+                });
 
         // Render PlantUML/Graphviz images when their tabs are selected
         if (visualizationTabPane != null) {
@@ -268,14 +313,15 @@ public class MainController implements Initializable {
     }
 
     private void initializeDocumentation() {
-        if (documentationContainer == null) return;
+        if (documentationContainer == null)
+            return;
         documentationContainer.getChildren().clear();
         documentationContainer.setSpacing(24);
 
         // ===== HERO SECTION =====
         VBox hero = new VBox(12);
         hero.getStyleClass().add("doc-hero");
-        
+
         HBox heroHeader = new HBox(16);
         heroHeader.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         Label heroTitle = new Label("\uD83D\uDCF1 Android Project Visualizer");
@@ -283,51 +329,58 @@ public class MainController implements Initializable {
         Label versionBadge = new Label("v1.0.0");
         versionBadge.getStyleClass().add("doc-hero-version");
         heroHeader.getChildren().addAll(heroTitle, versionBadge);
-        
-        Label heroSubtitle = new Label("A powerful tool for visualizing and understanding Android project architectures. " +
-            "Analyze code structure, generate UML diagrams, detect patterns, and gain insights into your codebase.");
+
+        Label heroSubtitle = new Label(
+                "A powerful tool for visualizing and understanding Android project architectures. " +
+                        "Analyze code structure, generate UML diagrams, detect patterns, and gain insights into your codebase.");
         heroSubtitle.getStyleClass().add("doc-hero-subtitle");
         heroSubtitle.setWrapText(true);
-        
+
         hero.getChildren().addAll(heroHeader, heroSubtitle);
         documentationContainer.getChildren().add(hero);
 
         // ===== GETTING STARTED SECTION =====
-        VBox gettingStarted = createDocSection("\uD83D\uDE80 Getting Started", 
-            "Open any Android project folder to begin analysis. The tool will automatically parse Java, Kotlin, and XML files, " +
-            "extract component relationships, and generate interactive architecture visualizations.");
-        
+        VBox gettingStarted = createDocSection("\uD83D\uDE80 Getting Started",
+                "Open any Android project folder to begin analysis. The tool will automatically parse Java, Kotlin, and XML files, "
+                        +
+                        "extract component relationships, and generate interactive architecture visualizations.");
+
         VBox stepsList = new VBox(4);
         stepsList.getChildren().addAll(
-            createDocListItem("1. Go to File → Open Project or press Ctrl+O"),
-            createDocListItem("2. Select your Android project's root directory"),
-            createDocListItem("3. Wait for analysis to complete (progress shown in status bar)"),
-            createDocListItem("4. Explore the generated diagrams and statistics")
-        );
+                createDocListItem("1. Go to File → Open Project or press Ctrl+O"),
+                createDocListItem("2. Select your Android project's root directory"),
+                createDocListItem("3. Wait for analysis to complete (progress shown in status bar)"),
+                createDocListItem("4. Explore the generated diagrams and statistics"));
         gettingStarted.getChildren().add(stepsList);
         documentationContainer.getChildren().add(gettingStarted);
 
         // ===== SCREENS & TABS SECTION =====
-        VBox screensSection = createDocSection("\uD83D\uDCCB Screens & Tabs", 
-            "The application provides multiple views for different aspects of your project analysis:");
-        
+        VBox screensSection = createDocSection("\uD83D\uDCCB Screens & Tabs",
+                "The application provides multiple views for different aspects of your project analysis:");
+
         VBox tabCards = new VBox(12);
         tabCards.getChildren().addAll(
-            createDocCard("\uD83C\uDFDB\uFE0F Architecture", "Interactive graph visualization of your project's component structure. Click components in the tree to add them to the canvas. Use zoom controls to navigate large diagrams."),
-            createDocCard("\uD83D\uDD17 Dependencies", "Detailed view of component dependencies and relationships. Identify coupling issues and understand how components interconnect."),
-            createDocCard("\uD83D\uDCCA Statistics", "Project metrics including total files, lines of code, component counts by type, and code complexity analysis per method."),
-            createDocCard("\uD83C\uDF31 PlantUML", "Generated PlantUML diagram code. Copy or save to use in other tools. Supports class diagrams and use case diagrams."),
-            createDocCard("\uD83D\uDD37 Graphviz", "Generated Graphviz DOT notation for alternative diagram rendering. Compatible with GraphViz tools."),
-            createDocCard("\uD83D\uDDBC\uFE0F PlantUML Preview", "Rendered PlantUML diagram as an image. Zoom in/out and export as PNG for documentation."),
-            createDocCard("\uD83D\uDDBC\uFE0F Graphviz Preview", "Rendered Graphviz diagram as an image with export capabilities.")
-        );
+                createDocCard("\uD83C\uDFDB\uFE0F Architecture",
+                        "Interactive graph visualization of your project's component structure. Click components in the tree to add them to the canvas. Use zoom controls to navigate large diagrams."),
+                createDocCard("\uD83D\uDD17 Dependencies",
+                        "Detailed view of component dependencies and relationships. Identify coupling issues and understand how components interconnect."),
+                createDocCard("\uD83D\uDCCA Statistics",
+                        "Project metrics including total files, lines of code, component counts by type, and code complexity analysis per method."),
+                createDocCard("\uD83C\uDF31 PlantUML",
+                        "Generated PlantUML diagram code. Copy or save to use in other tools. Supports class diagrams and use case diagrams."),
+                createDocCard("\uD83D\uDD37 Graphviz",
+                        "Generated Graphviz DOT notation for alternative diagram rendering. Compatible with GraphViz tools."),
+                createDocCard("\uD83D\uDDBC\uFE0F PlantUML Preview",
+                        "Rendered PlantUML diagram as an image. Zoom in/out and export as PNG for documentation."),
+                createDocCard("\uD83D\uDDBC\uFE0F Graphviz Preview",
+                        "Rendered Graphviz diagram as an image with export capabilities."));
         screensSection.getChildren().add(tabCards);
         documentationContainer.getChildren().add(screensSection);
 
         // ===== KEYBOARD SHORTCUTS =====
-        VBox shortcutsSection = createDocSection("⌨\uFE0F Keyboard Shortcuts", 
-            "Quick access to common actions:");
-        
+        VBox shortcutsSection = createDocSection("⌨\uFE0F Keyboard Shortcuts",
+                "Quick access to common actions:");
+
         javafx.scene.layout.GridPane shortcutsGrid = new javafx.scene.layout.GridPane();
         shortcutsGrid.setHgap(24);
         shortcutsGrid.setVgap(12);
@@ -347,31 +400,31 @@ public class MainController implements Initializable {
         documentationContainer.getChildren().add(shortcutsSection);
 
         // ===== AI FEATURES SECTION =====
-        VBox aiSection = createDocSection("\uD83E\uDD16 AI-Enhanced Analysis", 
-            "Optional AI-powered features using Microsoft Phi-2 for deeper code understanding:");
-        
+        VBox aiSection = createDocSection("\uD83E\uDD16 AI-Enhanced Analysis",
+                "Optional AI-powered features using Microsoft Phi-2 for deeper code understanding:");
+
         VBox aiFeatures = new VBox(8);
         aiFeatures.getChildren().addAll(
-            createDocListItem("• Intelligent use case extraction from method names and patterns"),
-            createDocListItem("• Natural language descriptions of component functionality"),
-            createDocListItem("• Automatic actor detection for use case diagrams"),
-            createDocListItem("• GPU-accelerated inference for fast analysis")
-        );
-        
+                createDocListItem("• Intelligent use case extraction from method names and patterns"),
+                createDocListItem("• Natural language descriptions of component functionality"),
+                createDocListItem("• Automatic actor detection for use case diagrams"),
+                createDocListItem("• GPU-accelerated inference for fast analysis"));
+
         VBox aiNote = new VBox(8);
         aiNote.setStyle("-fx-background-color: rgba(251, 191, 36, 0.1); -fx-background-radius: 10; -fx-padding: 16;");
-        Label aiNoteLabel = new Label("⚠\uFE0F AI features require downloading the Phi-2 model (~1.6GB). See AI_SETUP.md for instructions.");
+        Label aiNoteLabel = new Label(
+                "⚠\uFE0F AI features require downloading the Phi-2 model (~1.6GB). See AI_SETUP.md for instructions.");
         aiNoteLabel.setWrapText(true);
         aiNoteLabel.getStyleClass().add("doc-text");
         aiNote.getChildren().add(aiNoteLabel);
-        
+
         aiSection.getChildren().addAll(aiFeatures, aiNote);
         documentationContainer.getChildren().add(aiSection);
 
         // ===== TECH STACK SECTION =====
-        VBox techSection = createDocSection("\uD83D\uDEE0\uFE0F Technical Details", 
-            "Built with modern technologies for robust performance:");
-        
+        VBox techSection = createDocSection("\uD83D\uDEE0\uFE0F Technical Details",
+                "Built with modern technologies for robust performance:");
+
         javafx.scene.layout.GridPane techGrid = new javafx.scene.layout.GridPane();
         techGrid.setHgap(16);
         techGrid.setVgap(12);
@@ -388,19 +441,18 @@ public class MainController implements Initializable {
         documentationContainer.getChildren().add(techSection);
 
         // ===== PARSERS SECTION =====
-        VBox parsersSection = createDocSection("\uD83D\uDD0D Code Parsers", 
-            "12 specialized parsers for comprehensive Android project analysis:");
-        
+        VBox parsersSection = createDocSection("\uD83D\uDD0D Code Parsers",
+                "12 specialized parsers for comprehensive Android project analysis:");
+
         VBox parsersList = new VBox(4);
         parsersList.getChildren().addAll(
-            createDocListItem("• JavaFileParser - Parses Java classes, interfaces, methods, and annotations"),
-            createDocListItem("• KotlinParser - Full Kotlin support including data classes and extensions"),
-            createDocListItem("• XmlParser - Android resource files (layouts, strings, styles)"),
-            createDocListItem("• AndroidManifestParser - Activities, services, permissions extraction"),
-            createDocListItem("• NavigationGraphParser - Jetpack Navigation component support"),
-            createDocListItem("• IntentAnalyzer - Intent-based navigation detection"),
-            createDocListItem("• ComplexityAnalyzer - Cyclomatic complexity metrics")
-        );
+                createDocListItem("• JavaFileParser - Parses Java classes, interfaces, methods, and annotations"),
+                createDocListItem("• KotlinParser - Full Kotlin support including data classes and extensions"),
+                createDocListItem("• XmlParser - Android resource files (layouts, strings, styles)"),
+                createDocListItem("• AndroidManifestParser - Activities, services, permissions extraction"),
+                createDocListItem("• NavigationGraphParser - Jetpack Navigation component support"),
+                createDocListItem("• IntentAnalyzer - Intent-based navigation detection"),
+                createDocListItem("• ComplexityAnalyzer - Cyclomatic complexity metrics"));
         parsersSection.getChildren().add(parsersList);
         documentationContainer.getChildren().add(parsersSection);
     }
@@ -408,14 +460,14 @@ public class MainController implements Initializable {
     private VBox createDocSection(String title, String description) {
         VBox section = new VBox(12);
         section.getStyleClass().add("doc-section");
-        
+
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("doc-section-header");
-        
+
         Label descLabel = new Label(description);
         descLabel.getStyleClass().add("doc-text");
         descLabel.setWrapText(true);
-        
+
         section.getChildren().addAll(titleLabel, descLabel);
         return section;
     }
@@ -423,14 +475,14 @@ public class MainController implements Initializable {
     private VBox createDocCard(String title, String description) {
         VBox card = new VBox(8);
         card.getStyleClass().add("doc-card");
-        
+
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("doc-card-title");
-        
+
         Label descLabel = new Label(description);
         descLabel.getStyleClass().add("doc-card-desc");
         descLabel.setWrapText(true);
-        
+
         card.getChildren().addAll(titleLabel, descLabel);
         return card;
     }
@@ -439,11 +491,11 @@ public class MainController implements Initializable {
         HBox item = new HBox(8);
         item.getStyleClass().add("doc-list-item");
         item.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        
+
         Label textLabel = new Label(text);
         textLabel.getStyleClass().add("doc-list-text");
         textLabel.setWrapText(true);
-        
+
         item.getChildren().add(textLabel);
         return item;
     }
@@ -457,13 +509,13 @@ public class MainController implements Initializable {
     private VBox createTechItem(String label, String value) {
         VBox item = new VBox(4);
         item.getStyleClass().add("doc-tech-item");
-        
+
         Label labelNode = new Label(label.toUpperCase());
         labelNode.getStyleClass().add("doc-tech-label");
-        
+
         Label valueNode = new Label(value);
         valueNode.getStyleClass().add("doc-tech-value");
-        
+
         item.getChildren().addAll(labelNode, valueNode);
         return item;
     }
@@ -565,50 +617,51 @@ public class MainController implements Initializable {
         fileChooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("PNG Files", "*.png"),
                 new FileChooser.ExtensionFilter("JPEG Files", "*.jpg"),
-                new FileChooser.ExtensionFilter("SVG Files", "*.svg")
-        );
+                new FileChooser.ExtensionFilter("SVG Files", "*.svg"));
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-			try {
-				// Determine source based on active tab
-				Tab selectedTab = visualizationTabPane != null ? visualizationTabPane.getSelectionModel().getSelectedItem() : null;
-				Image imageToSave = null;
-				
-				if (selectedTab == plantUMLImageTab && plantUMLImageView != null) {
-					imageToSave = plantUMLImageView.getImage();
-				} else if (selectedTab == graphvizImageTab && graphvizImageView != null) {
-					imageToSave = graphvizImageView.getImage();
-				} else {
-					// Default to capturing the graph canvas
-					if (graphCanvas != null) {
-						WritableImage snapshot = graphCanvas.snapshot(new SnapshotParameters(), null);
-						imageToSave = snapshot;
-					}
-				}
-				
-				if (imageToSave != null) {
-					BufferedImage bufferedImage = SwingFXUtils.fromFXImage(imageToSave, null);
-					String fileName = file.getName().toLowerCase();
-					String format = "png";
-					if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-						format = "jpg";
-						// Convert transparent background to white for JPG
-						BufferedImage newBufferedImage = new BufferedImage(bufferedImage.getWidth(),
-								bufferedImage.getHeight(), BufferedImage.TYPE_INT_RGB);
-						newBufferedImage.createGraphics().drawImage(bufferedImage, 0, 0, java.awt.Color.WHITE, null);
-						bufferedImage = newBufferedImage;
-					}
-					
-					ImageIO.write(bufferedImage, format, file);
-					statusLabel.setText("Exported diagram to: " + file.getName());
-				} else {
-					statusLabel.setText("Nothing to export (Image is null)");
-				}
-			} catch (IOException ex) {
-				statusLabel.setText("Export failed: " + ex.getMessage());
-				showErrorAlert("Export Failed", "Could not save image: " + ex.getMessage());
-			}
+            try {
+                // Determine source based on active tab
+                Tab selectedTab = visualizationTabPane != null
+                        ? visualizationTabPane.getSelectionModel().getSelectedItem()
+                        : null;
+                Image imageToSave = null;
+
+                if (selectedTab == plantUMLImageTab && plantUMLImageView != null) {
+                    imageToSave = plantUMLImageView.getImage();
+                } else if (selectedTab == graphvizImageTab && graphvizImageView != null) {
+                    imageToSave = graphvizImageView.getImage();
+                } else {
+                    // Default to capturing the graph canvas
+                    if (graphCanvas != null) {
+                        WritableImage snapshot = graphCanvas.snapshot(new SnapshotParameters(), null);
+                        imageToSave = snapshot;
+                    }
+                }
+
+                if (imageToSave != null) {
+                    BufferedImage bufferedImage = SwingFXUtils.fromFXImage(imageToSave, null);
+                    String fileName = file.getName().toLowerCase();
+                    String format = "png";
+                    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+                        format = "jpg";
+                        // Convert transparent background to white for JPG
+                        BufferedImage newBufferedImage = new BufferedImage(bufferedImage.getWidth(),
+                                bufferedImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+                        newBufferedImage.createGraphics().drawImage(bufferedImage, 0, 0, java.awt.Color.WHITE, null);
+                        bufferedImage = newBufferedImage;
+                    }
+
+                    ImageIO.write(bufferedImage, format, file);
+                    statusLabel.setText("Exported diagram to: " + file.getName());
+                } else {
+                    statusLabel.setText("Nothing to export (Image is null)");
+                }
+            } catch (IOException ex) {
+                statusLabel.setText("Export failed: " + ex.getMessage());
+                showErrorAlert("Export Failed", "Could not save image: " + ex.getMessage());
+            }
         }
     }
 
@@ -624,112 +677,113 @@ public class MainController implements Initializable {
         fileChooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
                 new FileChooser.ExtensionFilter("HTML Files", "*.html"),
-                new FileChooser.ExtensionFilter("JSON Files", "*.json")
-        );
+                new FileChooser.ExtensionFilter("JSON Files", "*.json"));
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
             try {
-				if (currentAnalysisResult == null) {
-					statusLabel.setText("No analysis data to export");
-					return;
-				}
+                if (currentAnalysisResult == null) {
+                    statusLabel.setText("No analysis data to export");
+                    return;
+                }
 
-				// Generate documentation content
-				com.projectvisualizer.ai.ProjectUnderstandingService aiService = 
-					com.projectvisualizer.ai.ProjectUnderstandingService.getInstance();
-				
-				com.projectvisualizer.services.StructuredDocumentationGenerator generator = 
-					new com.projectvisualizer.services.StructuredDocumentationGenerator(
-						currentProjectPath, 
-						currentProjectName, 
-						currentAnalysisResult, 
-						aiService.isReady() ? aiService.getInferenceService() : null
-					);
-					
-				Map<String, String> docSections = generator.generateDocumentation();
-				StringBuilder reportContent = new StringBuilder();
-				
+                // Generate documentation content
+                com.projectvisualizer.ai.ProjectUnderstandingService aiService = com.projectvisualizer.ai.ProjectUnderstandingService
+                        .getInstance();
 
-				boolean isHtml = file.getName().toLowerCase().endsWith(".html");
-				boolean isJson = file.getName().toLowerCase().endsWith(".json");
-				boolean isPdf = file.getName().toLowerCase().endsWith(".pdf");
-				
-				if (isPdf) {
-				    exportToPdf(file, docSections, currentProjectName);
-				} else if (isJson) {
-					// Simple JSON construction
-					reportContent.append("{\n");
-					reportContent.append("  \"project\": \"").append(currentProjectName).append("\",\n");
-					reportContent.append("  \"sections\": {\n");
-					int i = 0;
-					for (Map.Entry<String, String> entry : docSections.entrySet()) {
-						reportContent.append("    \"").append(entry.getKey()).append("\": \"")
-							.append(entry.getValue().replace("\"", "\\\"").replace("\n", "\\n")).append("\"");
-						if (i < docSections.size() - 1) reportContent.append(",");
-						reportContent.append("\n");
-						i++;
-					}
-					reportContent.append("  }\n");
-					reportContent.append("}");
-					try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-					    writer.write(reportContent.toString());
-				    }
-				} else if (isHtml) {
-					reportContent.append("<!DOCTYPE html>\n<html>\n<head>\n");
-					reportContent.append("<title>Project Documentation - ").append(currentProjectName).append("</title>\n");
-					reportContent.append("<style>\n");
-					reportContent.append("body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }\n");
-					reportContent.append("h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }\n");
-					reportContent.append("h2 { color: #34495e; margin-top: 30px; }\n");
-					reportContent.append("h3 { color: #16a085; }\n");
-					reportContent.append("pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }\n");
-					reportContent.append("table { border-collapse: collapse; width: 100%; margin: 15px 0; }\n");
-					reportContent.append("th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }\n");
-					reportContent.append("th { background-color: #f2f2f2; }\n");
-					reportContent.append("tr:nth-child(even) { background-color: #f9f9f9; }\n");
-					reportContent.append("</style>\n</head>\n<body>\n");
-					reportContent.append("<h1>").append(currentProjectName).append(" Documentation</h1>\n");
-					
-					for (Map.Entry<String, String> entry : docSections.entrySet()) {
-						reportContent.append("<h2>").append(entry.getKey()).append("</h2>\n");
-						// Basic Markdown-to-HTML conversion
-						String content = entry.getValue()
-							.replace("\n", "<br/>\n")
-							.replaceAll("\\*\\*(.*?)\\*\\*", "<strong>$1</strong>")
-							.replaceAll("`(.*?)`", "<code>$1</code>")
-							.replaceAll("### (.*?)<br/>", "<h3>$1</h3>")
-							.replaceAll("\\| (.*?) \\|", "<tr><td>$1</td></tr>") // Very naive table
-							.replaceAll("<tr><td>- (.*?)</td></tr>", "<li>$1</li>"); // List items
-						
-						// Fix tables (naive fix)
-						if (content.contains("<tr>")) {
-							content = content.replace("<br/>", ""); // Remove breaks in tables
-							content = "<table>" + content + "</table>";
-						}
-						
-						reportContent.append("<div>").append(content).append("</div>\n");
-					}
-					reportContent.append("</body>\n</html>");
-					try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-					    writer.write(reportContent.toString());
-				    }
-				} else {
-					// Default Markdown/Text
-					reportContent.append("# Project Documentation: ").append(currentProjectName).append("\n\n");
-					for (Map.Entry<String, String> entry : docSections.entrySet()) {
-						reportContent.append("## ").append(entry.getKey()).append("\n\n");
-						reportContent.append(entry.getValue()).append("\n\n");
-					}
-					try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-					    writer.write(reportContent.toString());
-				    }
-				}
-				
-				statusLabel.setText("Exported report to: " + file.getName());
+                com.projectvisualizer.services.StructuredDocumentationGenerator generator = new com.projectvisualizer.services.StructuredDocumentationGenerator(
+                        currentProjectPath,
+                        currentProjectName,
+                        currentAnalysisResult,
+                        aiService.isReady() ? aiService.getInferenceService() : null);
+
+                Map<String, String> docSections = generator.generateDocumentation();
+                StringBuilder reportContent = new StringBuilder();
+
+                boolean isHtml = file.getName().toLowerCase().endsWith(".html");
+                boolean isJson = file.getName().toLowerCase().endsWith(".json");
+                boolean isPdf = file.getName().toLowerCase().endsWith(".pdf");
+
+                if (isPdf) {
+                    exportToPdf(file, docSections, currentProjectName);
+                } else if (isJson) {
+                    // Simple JSON construction
+                    reportContent.append("{\n");
+                    reportContent.append("  \"project\": \"").append(currentProjectName).append("\",\n");
+                    reportContent.append("  \"sections\": {\n");
+                    int i = 0;
+                    for (Map.Entry<String, String> entry : docSections.entrySet()) {
+                        reportContent.append("    \"").append(entry.getKey()).append("\": \"")
+                                .append(entry.getValue().replace("\"", "\\\"").replace("\n", "\\n")).append("\"");
+                        if (i < docSections.size() - 1)
+                            reportContent.append(",");
+                        reportContent.append("\n");
+                        i++;
+                    }
+                    reportContent.append("  }\n");
+                    reportContent.append("}");
+                    try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                        writer.write(reportContent.toString());
+                    }
+                } else if (isHtml) {
+                    reportContent.append("<!DOCTYPE html>\n<html>\n<head>\n");
+                    reportContent.append("<title>Project Documentation - ").append(currentProjectName)
+                            .append("</title>\n");
+                    reportContent.append("<style>\n");
+                    reportContent.append(
+                            "body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }\n");
+                    reportContent
+                            .append("h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }\n");
+                    reportContent.append("h2 { color: #34495e; margin-top: 30px; }\n");
+                    reportContent.append("h3 { color: #16a085; }\n");
+                    reportContent.append(
+                            "pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }\n");
+                    reportContent.append("table { border-collapse: collapse; width: 100%; margin: 15px 0; }\n");
+                    reportContent.append("th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }\n");
+                    reportContent.append("th { background-color: #f2f2f2; }\n");
+                    reportContent.append("tr:nth-child(even) { background-color: #f9f9f9; }\n");
+                    reportContent.append("</style>\n</head>\n<body>\n");
+                    reportContent.append("<h1>").append(currentProjectName).append(" Documentation</h1>\n");
+
+                    for (Map.Entry<String, String> entry : docSections.entrySet()) {
+                        reportContent.append("<h2>").append(entry.getKey()).append("</h2>\n");
+                        // Basic Markdown-to-HTML conversion
+                        String content = entry.getValue()
+                                .replace("\n", "<br/>\n")
+                                .replaceAll("\\*\\*(.*?)\\*\\*", "<strong>$1</strong>")
+                                .replaceAll("`(.*?)`", "<code>$1</code>")
+                                .replaceAll("### (.*?)<br/>", "<h3>$1</h3>")
+                                .replaceAll("\\| (.*?) \\|", "<tr><td>$1</td></tr>") // Very naive table
+                                .replaceAll("<tr><td>- (.*?)</td></tr>", "<li>$1</li>"); // List items
+
+                        // Fix tables (naive fix)
+                        if (content.contains("<tr>")) {
+                            content = content.replace("<br/>", ""); // Remove breaks in tables
+                            content = "<table>" + content + "</table>";
+                        }
+
+                        reportContent.append("<div>").append(content).append("</div>\n");
+                    }
+                    reportContent.append("</body>\n</html>");
+                    try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                        writer.write(reportContent.toString());
+                    }
+                } else {
+                    // Default Markdown/Text
+                    reportContent.append("# Project Documentation: ").append(currentProjectName).append("\n\n");
+                    for (Map.Entry<String, String> entry : docSections.entrySet()) {
+                        reportContent.append("## ").append(entry.getKey()).append("\n\n");
+                        reportContent.append(entry.getValue()).append("\n\n");
+                    }
+                    try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                        writer.write(reportContent.toString());
+                    }
+                }
+
+                statusLabel.setText("Exported report to: " + file.getName());
             } catch (IOException ex) {
                 statusLabel.setText("Export failed: " + ex.getMessage());
-				showErrorAlert("Export Failed", "Could not save report: " + ex.getMessage());
+                showErrorAlert("Export Failed", "Could not save report: " + ex.getMessage());
             }
         }
     }
@@ -738,14 +792,14 @@ public class MainController implements Initializable {
         PdfWriter writer = new PdfWriter(file);
         PdfDocument pdf = new PdfDocument(writer);
         Document document = new Document(pdf);
-        
+
         // Title
         Paragraph title = new Paragraph(projectName + " Documentation")
                 .setTextAlignment(TextAlignment.CENTER)
                 .setFontSize(24)
                 .setBold();
         document.add(title);
-        
+
         // Sections
         for (Map.Entry<String, String> entry : sections.entrySet()) {
             // Header
@@ -753,12 +807,12 @@ public class MainController implements Initializable {
                     .setFontSize(18)
                     .setBold()
                     .setMarginTop(20));
-            
+
             // Content (Simple rendering)
             String content = entry.getValue();
             Paragraph p = new Paragraph(content)
                     .setFontSize(12);
-            
+
             // If content looks like a table or code, use monospace
             if (content.contains("|") || content.contains("```")) {
                 try {
@@ -767,10 +821,10 @@ public class MainController implements Initializable {
                     // Ignore font error
                 }
             }
-            
+
             document.add(p);
         }
-        
+
         document.close();
     }
 
@@ -802,16 +856,15 @@ public class MainController implements Initializable {
         aboutDialog.setTitle("About Android Project Visualizer");
         aboutDialog.setHeaderText("Android Project Architecture Visualizer");
         aboutDialog.setContentText(
-            "Version: 1.0.0\n\n" +
-            "A powerful tool for visualizing and understanding\n" +
-            "Android project architectures.\n\n" +
-            "Features:\n" +
-            "• Interactive architecture diagrams\n" +
-            "• PlantUML & Graphviz export\n" +
-            "• AI-enhanced use case detection\n" +
-            "• Code complexity analysis\n\n" +
-            "Built with JavaFX 17"
-        );
+                "Version: 1.0.0\n\n" +
+                        "A powerful tool for visualizing and understanding\n" +
+                        "Android project architectures.\n\n" +
+                        "Features:\n" +
+                        "• Interactive architecture diagrams\n" +
+                        "• PlantUML & Graphviz export\n" +
+                        "• AI-enhanced use case detection\n" +
+                        "• Code complexity analysis\n\n" +
+                        "Built with JavaFX 17");
         aboutDialog.showAndWait();
     }
 
@@ -824,33 +877,37 @@ public class MainController implements Initializable {
     }
 
     private void populateProjectDocumentation(AnalysisResult result, String projectName) {
-        if (projectDocsContainer == null) return;
-        
+        if (projectDocsContainer == null)
+            return;
+
         projectDocsContainer.getChildren().clear();
-        
+
         if (result == null || result.getComponents() == null || result.getComponents().isEmpty()) {
             if (projectDocsStatusLabel != null) {
                 projectDocsStatusLabel.setText("No project loaded");
             }
             return;
         }
-        
+
+        if (projectDocsStatusLabel != null) {
+            projectDocsStatusLabel.setText("🤖 Generating documentation in background...");
+        }
+        statusLabel.setText("Generating documentation...");
+
         try {
             // Get AI service from ProjectUnderstandingService singleton
-            com.projectvisualizer.ai.ProjectUnderstandingService aiService = 
-                com.projectvisualizer.ai.ProjectUnderstandingService.getInstance();
-            
-            com.projectvisualizer.ai.Phi2InferenceService phi2Service = 
-                aiService.isReady() ? aiService.getInferenceService() : null;
-            
-            com.projectvisualizer.services.ProjectDocumentationGenerator generator = 
-                new com.projectvisualizer.services.ProjectDocumentationGenerator(result, projectName, currentProjectPath, phi2Service);
-            
+            com.projectvisualizer.ai.ProjectUnderstandingService aiService = com.projectvisualizer.ai.ProjectUnderstandingService
+                    .getInstance();
+
+            com.projectvisualizer.ai.Phi2InferenceService phi2Service = aiService.isReady()
+                    ? aiService.getInferenceService()
+                    : null;
+
+            com.projectvisualizer.services.ProjectDocumentationGenerator generator = new com.projectvisualizer.services.ProjectDocumentationGenerator(
+                    result, projectName, currentProjectPath, phi2Service);
+
             if (aiService.isReady()) {
-                // Use AI-enhanced documentation
-                if (projectDocsStatusLabel != null) {
-                    projectDocsStatusLabel.setText("🤖 Generating AI-enhanced documentation...");
-                }
+                // generateDocumentationWithAI now handles its own async work internally
                 generator.generateDocumentationWithAI(projectDocsContainer, status -> {
                     if (projectDocsStatusLabel != null) {
                         projectDocsStatusLabel.setText(status);
@@ -858,16 +915,21 @@ public class MainController implements Initializable {
                     statusLabel.setText(status);
                 });
             } else {
-                // Fallback to pattern-based documentation
-                java.util.List<javafx.scene.layout.VBox> sections = generator.generateDocumentation();
-                projectDocsContainer.getChildren().addAll(sections);
-                
-                String aiStatus = aiService.isModelAvailable() ? 
-                    " (AI model available but not loaded)" : " (AI model not available)";
-                if (projectDocsStatusLabel != null) {
-                    projectDocsStatusLabel.setText("Documentation generated for " + projectName + aiStatus);
-                }
-                statusLabel.setText("Generated project documentation" + aiStatus);
+                // Fallback: Run non-AI generation in background
+                CompletableFuture.runAsync(() -> {
+                    java.util.List<javafx.scene.layout.VBox> sections = generator.generateDocumentation();
+
+                    javafx.application.Platform.runLater(() -> {
+                        projectDocsContainer.getChildren().addAll(sections);
+
+                        String aiStatus = aiService.isModelAvailable() ? " (AI model available but not loaded)"
+                                : " (AI model not available)";
+                        if (projectDocsStatusLabel != null) {
+                            projectDocsStatusLabel.setText("Documentation generated for " + projectName + aiStatus);
+                        }
+                        statusLabel.setText("Generated project documentation" + aiStatus);
+                    });
+                });
             }
         } catch (Exception e) {
             statusLabel.setText("Error generating documentation: " + e.getMessage());
@@ -876,7 +938,6 @@ public class MainController implements Initializable {
             }
         }
     }
-
 
     @FXML
     private void handleZoomIn() {
@@ -936,41 +997,68 @@ public class MainController implements Initializable {
     }
 
     private void renderPlantUml(boolean showOnCanvas) {
-        try {
-            if (plantUMLTextArea == null || plantUMLImageView == null) return;
-            String src = plantUMLTextArea.getText();
-            if (src == null || src.trim().isEmpty()) {
-                statusLabel.setText("No PlantUML source to render");
-                return;
-            }
-            // Ensure PlantUML has start/end wrappers
-            String puml = src.trim();
-            if (!puml.contains("@startuml")) {
-                puml = "@startuml\n" + puml + "\n@enduml";
-            }
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-            SourceStringReader reader = new SourceStringReader(puml);
-            reader.generateImage(os, new FileFormatOption(FileFormat.PNG));
-            byte[] bytes = os.toByteArray();
-            if (bytes.length == 0) {
-                statusLabel.setText("PlantUML produced empty output");
-                return;
-            }
-            Image fxImage = new Image(new ByteArrayInputStream(bytes));
-            plantUMLImageView.setImage(fxImage);
-            statusLabel.setText("Rendered PlantUML diagram");
-
-            if (showOnCanvas && graphCanvas != null) {
-                // Clear canvas and show image, fit to canvas width (responsive)
-                graphCanvas.getChildren().clear();
-                ImageView iv = new ImageView(fxImage);
-                iv.setPreserveRatio(true);
-                iv.fitWidthProperty().bind(graphCanvas.widthProperty());
-                graphCanvas.getChildren().add(iv);
-            }
-        } catch (Exception e) {
-            statusLabel.setText("Error rendering PlantUML: " + e.getMessage());
+        if (plantUMLTextArea == null || plantUMLImageView == null)
+            return;
+        String src = plantUMLTextArea.getText();
+        if (src == null || src.trim().isEmpty()) {
+            statusLabel.setText("No PlantUML source to render");
+            return;
         }
+
+        statusLabel.setText("Wait... Rendering PlantUML...");
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                // Ensure PlantUML has start/end wrappers
+                String puml = src.trim();
+                if (!puml.contains("@startuml")) {
+                    puml = "@startuml\n" + puml + "\n@enduml";
+                }
+
+                // Add scale directive for higher resolution if not present
+                if (!puml.contains("scale ")) {
+                    puml = puml.replace("@startuml", "@startuml\nscale 2");
+                }
+
+                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                SourceStringReader reader = new SourceStringReader(puml);
+                // Heavy operation happening here - render at higher quality
+                reader.generateImage(os, new FileFormatOption(FileFormat.PNG));
+                return os.toByteArray();
+            } catch (Exception e) {
+                return null;
+            }
+        }).thenAccept(bytes -> {
+            javafx.application.Platform.runLater(() -> {
+                if (bytes == null || bytes.length == 0) {
+                    statusLabel.setText("PlantUML rendering failed or empty");
+                    return;
+                }
+
+                try {
+                    Image fxImage = new Image(new ByteArrayInputStream(bytes));
+                    plantUMLImageView.setImage(fxImage);
+
+                    // Reset zoom to 100% and apply - let user scroll to see full diagram
+                    plantUmlZoom = 1.0;
+                    applyPlantUmlZoom();
+
+                    statusLabel.setText("Rendered PlantUML diagram (" + (int) fxImage.getWidth() + "x"
+                            + (int) fxImage.getHeight() + "px) - scroll to view full diagram");
+
+                    if (showOnCanvas && graphCanvas != null) {
+                        // Clear canvas and show image, fit to canvas width (responsive)
+                        graphCanvas.getChildren().clear();
+                        ImageView iv = new ImageView(fxImage);
+                        iv.setPreserveRatio(true);
+                        iv.fitWidthProperty().bind(graphCanvas.widthProperty());
+                        graphCanvas.getChildren().add(iv);
+                    }
+                } catch (Exception e) {
+                    statusLabel.setText("Error displaying PlantUML: " + e.getMessage());
+                }
+            });
+        });
     }
 
     @FXML
@@ -979,18 +1067,17 @@ public class MainController implements Initializable {
         fileChooser.setTitle("Export PlantUML Diagram");
         fileChooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("PlantUML Files", "*.puml"),
-                new FileChooser.ExtensionFilter("Text Files", "*.txt")
-        );
+                new FileChooser.ExtensionFilter("Text Files", "*.txt"));
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-				writer.write(plantUMLTextArea.getText());
-				statusLabel.setText("Exported PlantUML to: " + file.getName());
-			} catch (IOException ex) {
-				statusLabel.setText("Export failed: " + ex.getMessage());
-				showErrorAlert("Export Failed", "Could not save PlantUML file: " + ex.getMessage());
-			}
+                writer.write(plantUMLTextArea.getText());
+                statusLabel.setText("Exported PlantUML to: " + file.getName());
+            } catch (IOException ex) {
+                statusLabel.setText("Export failed: " + ex.getMessage());
+                showErrorAlert("Export Failed", "Could not save PlantUML file: " + ex.getMessage());
+            }
         }
     }
 
@@ -1010,67 +1097,80 @@ public class MainController implements Initializable {
         fileChooser.setTitle("Export Graphviz Diagram");
         fileChooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("DOT Files", "*.dot"),
-                new FileChooser.ExtensionFilter("Text Files", "*.txt")
-        );
+                new FileChooser.ExtensionFilter("Text Files", "*.txt"));
 
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
-             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-				writer.write(graphvizTextArea.getText());
-				statusLabel.setText("Exported Graphviz to: " + file.getName());
-			} catch (IOException ex) {
-				statusLabel.setText("Export failed: " + ex.getMessage());
-				showErrorAlert("Export Failed", "Could not save Graphviz file: " + ex.getMessage());
-			}
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                writer.write(graphvizTextArea.getText());
+                statusLabel.setText("Exported Graphviz to: " + file.getName());
+            } catch (IOException ex) {
+                statusLabel.setText("Export failed: " + ex.getMessage());
+                showErrorAlert("Export Failed", "Could not save Graphviz file: " + ex.getMessage());
+            }
         }
     }
 
     private void renderGraphviz(boolean showOnCanvas) {
-        try {
-            if (graphvizTextArea == null || graphvizImageView == null) return;
-            String dot = graphvizTextArea.getText();
-            if (dot == null || dot.trim().isEmpty()) {
-                statusLabel.setText("No Graphviz (DOT) source to render");
-                return;
-            }
-            String src = dot;
-            String low = dot.toLowerCase();
-            if (!low.contains("digraph") && !low.contains("graph") && (dot.contains("->") || dot.contains("--"))) {
-                src = "digraph G {\n" + dot + "\n}";
-            }
-            BufferedImage bi = Graphviz.fromString(src).render(Format.PNG).toImage();
-            if (bi == null) {
-                statusLabel.setText("Graphviz produced no image");
-                return;
-            }
-            Image fxImage = SwingFXUtils.toFXImage(bi, null);
-            graphvizImageView.setImage(fxImage);
-            statusLabel.setText("Rendered Graphviz diagram");
-
-            if (showOnCanvas && graphCanvas != null) {
-                graphCanvas.getChildren().clear();
-                ImageView iv = new ImageView(fxImage);
-                iv.setPreserveRatio(true);
-                iv.fitWidthProperty().bind(graphCanvas.widthProperty());
-                graphCanvas.getChildren().add(iv);
-            }
-        } catch (Exception e) {
-            statusLabel.setText("Error rendering Graphviz: " + e.getMessage());
+        if (graphvizTextArea == null || graphvizImageView == null)
+            return;
+        String dot = graphvizTextArea.getText();
+        if (dot == null || dot.trim().isEmpty()) {
+            statusLabel.setText("No Graphviz (DOT) source to render");
+            return;
         }
+
+        statusLabel.setText("Wait... Rendering Graphviz...");
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String src = dot;
+                String low = dot.toLowerCase();
+                if (!low.contains("digraph") && !low.contains("graph") && (dot.contains("->") || dot.contains("--"))) {
+                    src = "digraph G {\n" + dot + "\n}";
+                }
+                return Graphviz.fromString(src).render(Format.PNG).toImage();
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }).thenAccept(bi -> {
+            javafx.application.Platform.runLater(() -> {
+                if (bi == null) {
+                    statusLabel.setText("Graphviz rendering failed");
+                    return;
+                }
+                try {
+                    Image fxImage = SwingFXUtils.toFXImage(bi, null);
+                    graphvizImageView.setImage(fxImage);
+                    statusLabel.setText("Rendered Graphviz diagram");
+
+                    if (showOnCanvas && graphCanvas != null) {
+                        graphCanvas.getChildren().clear();
+                        ImageView iv = new ImageView(fxImage);
+                        iv.setPreserveRatio(true);
+                        iv.fitWidthProperty().bind(graphCanvas.widthProperty());
+                        graphCanvas.getChildren().add(iv);
+                    }
+                } catch (Exception e) {
+                    statusLabel.setText("Error displaying Graphviz: " + e.getMessage());
+                }
+            });
+        });
     }
 
     @FXML
     private void handleZoomInPlantUML() {
         plantUmlZoom = Math.min(plantUmlZoom * 1.25, 5.0);
         applyPlantUmlZoom();
-        statusLabel.setText("PlantUML zoom: " + (int)(plantUmlZoom * 100) + "%");
+        statusLabel.setText("PlantUML zoom: " + (int) (plantUmlZoom * 100) + "%");
     }
 
     @FXML
     private void handleZoomOutPlantUML() {
         plantUmlZoom = Math.max(plantUmlZoom / 1.25, 0.2);
         applyPlantUmlZoom();
-        statusLabel.setText("PlantUML zoom: " + (int)(plantUmlZoom * 100) + "%");
+        statusLabel.setText("PlantUML zoom: " + (int) (plantUmlZoom * 100) + "%");
     }
 
     @FXML
@@ -1081,12 +1181,15 @@ public class MainController implements Initializable {
     }
 
     private void applyPlantUmlZoom() {
-        if (plantUMLImageView == null) return;
+        if (plantUMLImageView == null)
+            return;
         Image img = plantUMLImageView.getImage();
-        if (img == null) return;
+        if (img == null)
+            return;
         double baseW = img.getWidth();
         double baseH = img.getHeight();
-        if (baseW <= 0 || baseH <= 0) return;
+        if (baseW <= 0 || baseH <= 0)
+            return;
         plantUMLImageView.setFitWidth(baseW * plantUmlZoom);
         plantUMLImageView.setFitHeight(baseH * plantUmlZoom);
     }
@@ -1100,14 +1203,14 @@ public class MainController implements Initializable {
     private void handleZoomInGraphviz() {
         graphvizZoom = Math.min(graphvizZoom * 1.25, 5.0);
         applyGraphvizZoom();
-        statusLabel.setText("Graphviz zoom: " + (int)(graphvizZoom * 100) + "%");
+        statusLabel.setText("Graphviz zoom: " + (int) (graphvizZoom * 100) + "%");
     }
 
     @FXML
     private void handleZoomOutGraphviz() {
         graphvizZoom = Math.max(graphvizZoom / 1.25, 0.2);
         applyGraphvizZoom();
-        statusLabel.setText("Graphviz zoom: " + (int)(graphvizZoom * 100) + "%");
+        statusLabel.setText("Graphviz zoom: " + (int) (graphvizZoom * 100) + "%");
     }
 
     @FXML
@@ -1118,12 +1221,15 @@ public class MainController implements Initializable {
     }
 
     private void applyGraphvizZoom() {
-        if (graphvizImageView == null) return;
+        if (graphvizImageView == null)
+            return;
         Image img = graphvizImageView.getImage();
-        if (img == null) return;
+        if (img == null)
+            return;
         double baseW = img.getWidth();
         double baseH = img.getHeight();
-        if (baseW <= 0 || baseH <= 0) return;
+        if (baseW <= 0 || baseH <= 0)
+            return;
         graphvizImageView.setFitWidth(baseW * graphvizZoom);
         graphvizImageView.setFitHeight(baseH * graphvizZoom);
     }
@@ -1133,8 +1239,79 @@ public class MainController implements Initializable {
         handleExportEnhancedDiagram();
     }
 
+    @FXML
+    private void handleFitPlantUMLToView() {
+        if (plantUMLImageView == null || plantUMLScrollPane == null)
+            return;
+        Image img = plantUMLImageView.getImage();
+        if (img == null)
+            return;
+
+        double imgWidth = img.getWidth();
+        double imgHeight = img.getHeight();
+        if (imgWidth <= 0 || imgHeight <= 0)
+            return;
+
+        // Get the visible viewport size
+        double viewportWidth = plantUMLScrollPane.getViewportBounds().getWidth();
+        double viewportHeight = plantUMLScrollPane.getViewportBounds().getHeight();
+
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            viewportWidth = plantUMLScrollPane.getWidth() - 20;
+            viewportHeight = plantUMLScrollPane.getHeight() - 20;
+        }
+
+        // Calculate scale to fit whole image in viewport
+        double scaleX = viewportWidth / imgWidth;
+        double scaleY = viewportHeight / imgHeight;
+        double fitScale = Math.min(scaleX, scaleY);
+
+        // Clamp the scale to reasonable bounds
+        fitScale = Math.max(0.1, Math.min(fitScale, 2.0));
+
+        plantUmlZoom = fitScale;
+        applyPlantUmlZoom();
+        statusLabel.setText("PlantUML fitted to view: " + (int) (plantUmlZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleFitGraphvizToView() {
+        if (graphvizImageView == null || graphvizScrollPane == null)
+            return;
+        Image img = graphvizImageView.getImage();
+        if (img == null)
+            return;
+
+        double imgWidth = img.getWidth();
+        double imgHeight = img.getHeight();
+        if (imgWidth <= 0 || imgHeight <= 0)
+            return;
+
+        // Get the visible viewport size
+        double viewportWidth = graphvizScrollPane.getViewportBounds().getWidth();
+        double viewportHeight = graphvizScrollPane.getViewportBounds().getHeight();
+
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            viewportWidth = graphvizScrollPane.getWidth() - 20;
+            viewportHeight = graphvizScrollPane.getHeight() - 20;
+        }
+
+        // Calculate scale to fit whole image in viewport
+        double scaleX = viewportWidth / imgWidth;
+        double scaleY = viewportHeight / imgHeight;
+        double fitScale = Math.min(scaleX, scaleY);
+
+        // Clamp the scale to reasonable bounds
+        fitScale = Math.max(0.1, Math.min(fitScale, 2.0));
+
+        graphvizZoom = fitScale;
+        applyGraphvizZoom();
+        statusLabel.setText("Graphviz fitted to view: " + (int) (graphvizZoom * 100) + "%");
+    }
+
     private void handleComponentSelection(TreeItem<String> selectedItem) {
-        if (selectedItem == null || selectedItem.getValue() == null) return;
+        if (selectedItem == null || selectedItem.getValue() == null)
+            return;
 
         String itemValue = selectedItem.getValue();
 
@@ -1190,7 +1367,8 @@ public class MainController implements Initializable {
                     String compName = comp.getName().toLowerCase();
                     String fileName = itemValue.toLowerCase();
 
-                    if (fileName.contains(compName) || compName.contains(fileName.replace(".java", "").replace(".kt", ""))) {
+                    if (fileName.contains(compName)
+                            || compName.contains(fileName.replace(".java", "").replace(".kt", ""))) {
                         component = comp;
                         System.out.println("Found component by pattern match: " + comp.getName());
                         break;
@@ -1202,7 +1380,8 @@ public class MainController implements Initializable {
         if (component != null) {
             System.out.println("Adding component to graph: " + component.getName());
             graphManager.addComponentToGraph(component);
-            statusLabel.setText("Added " + component.getName() + " (" + component.getType() + " - " + component.getLayer() + ") to graph");
+            statusLabel.setText("Added " + component.getName() + " (" + component.getType() + " - "
+                    + component.getLayer() + ") to graph");
 
             // Auto-scroll to the new node after a short delay
             autoScrollToNode(component.getId());
@@ -1214,25 +1393,23 @@ public class MainController implements Initializable {
     }
 
     private void autoScrollToNode(String componentId) {
-        javafx.application.Platform.runLater(() -> {
-            try {
-                Thread.sleep(300); // Give time for the node to be rendered
-                diagramScrollPane.layout();
+        // Use PauseTransition instead of Thread.sleep to avoid blocking UI
+        javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(300));
+        pause.setOnFinished(event -> {
+            diagramScrollPane.layout();
 
-                // Try to find and center on the node
-                GraphNode node = graphManager.getNodeMap().get(componentId);
-                if (node != null) {
-                    javafx.scene.layout.VBox container = node.getContainer();
-                    double centerX = container.getLayoutX() / graphCanvas.getWidth();
-                    double centerY = container.getLayoutY() / graphCanvas.getHeight();
+            // Try to find and center on the node
+            GraphNode node = graphManager.getNodeMap().get(componentId);
+            if (node != null) {
+                javafx.scene.layout.VBox container = node.getContainer();
+                double centerX = container.getLayoutX() / graphCanvas.getWidth();
+                double centerY = container.getLayoutY() / graphCanvas.getHeight();
 
-                    diagramScrollPane.setHvalue(Math.max(0, Math.min(1, centerX)));
-                    diagramScrollPane.setVvalue(Math.max(0, Math.min(1, centerY)));
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                diagramScrollPane.setHvalue(Math.max(0, Math.min(1, centerX)));
+                diagramScrollPane.setVvalue(Math.max(0, Math.min(1, centerY)));
             }
         });
+        pause.play();
     }
 
     // Utility Methods
@@ -1270,7 +1447,8 @@ public class MainController implements Initializable {
         Set<String> addedKeys = new LinkedHashSet<>();
 
         for (CodeComponent component : components) {
-            if (component == null) continue;
+            if (component == null)
+                continue;
             String filePath = component.getFilePath();
             String language = component.getLanguage();
 
@@ -1340,7 +1518,8 @@ public class MainController implements Initializable {
     }
 
     private void resolveDependencies(List<CodeComponent> allComponents) {
-        if (allComponents == null || allComponents.isEmpty()) return;
+        if (allComponents == null || allComponents.isEmpty())
+            return;
 
         // Use a merge function to handle duplicate keys by keeping the first occurrence
         Map<String, CodeComponent> byId = allComponents.stream()
@@ -1352,13 +1531,13 @@ public class MainController implements Initializable {
                             System.out.println("WARNING: Duplicate component ID found: " + existing.getId() +
                                     ". Keeping first occurrence: " + existing.getName());
                             return existing; // Keep the existing component when duplicate ID is found
-                        }
-                ));
+                        }));
 
         // Build simple-name fallback map
         Map<String, CodeComponent> bySimpleName = new HashMap<>();
         for (CodeComponent c : allComponents) {
-            if (c == null) continue;
+            if (c == null)
+                continue;
             String id = c.getId();
             String simple = null;
             if (id != null && id.contains(".")) {
@@ -1366,11 +1545,13 @@ public class MainController implements Initializable {
             } else if (c.getName() != null) {
                 simple = c.getName();
             }
-            if (simple != null) bySimpleName.putIfAbsent(simple, c);
+            if (simple != null)
+                bySimpleName.putIfAbsent(simple, c);
         }
 
         for (CodeComponent component : allComponents) {
-            if (component == null) continue;
+            if (component == null)
+                continue;
             List<CodeComponent> originalDeps = component.getDependencies();
             if (originalDeps == null || originalDeps.isEmpty()) {
                 component.setDependencies(Collections.emptyList());
@@ -1380,7 +1561,8 @@ public class MainController implements Initializable {
             List<CodeComponent> resolvedDependencies = new ArrayList<>();
 
             for (CodeComponent dependency : originalDeps) {
-                if (dependency == null) continue;
+                if (dependency == null)
+                    continue;
                 CodeComponent resolved = null;
                 if (dependency.getId() != null) {
                     resolved = byId.get(dependency.getId());
@@ -1412,7 +1594,8 @@ public class MainController implements Initializable {
     }
 
     private void detectComponentLayer(CodeComponent component) {
-        if (component.getName() == null) return;
+        if (component.getName() == null)
+            return;
 
         String name = component.getName().toLowerCase();
         if (name.endsWith("repository") || name.endsWith("datasource") || name.endsWith("dao")) {
@@ -1478,8 +1661,7 @@ public class MainController implements Initializable {
 
         viewModeMenuButton.getItems().addAll(
                 allItems, uiItems, dataModelItems, businessLogicItems,
-                navigationItems, useCaseItems, new SeparatorMenuItem(), relationshipsItems
-        );
+                navigationItems, useCaseItems, new SeparatorMenuItem(), relationshipsItems);
     }
 
     private void setViewMode(String mode) {
@@ -1498,13 +1680,20 @@ public class MainController implements Initializable {
 
     private String getViewModeDisplayName(String mode) {
         switch (mode) {
-            case "ALL": return "All Components";
-            case "UI": return "UI Components";
-            case "DATA_MODEL": return "Data Models";
-            case "BUSINESS_LOGIC": return "Business Logic";
-            case "NAVIGATION": return "Navigation/Intents";
-            case "USE_CASE": return "Use Case Diagram";
-            default: return "All Components";
+            case "ALL":
+                return "All Components";
+            case "UI":
+                return "UI Components";
+            case "DATA_MODEL":
+                return "Data Models";
+            case "BUSINESS_LOGIC":
+                return "Business Logic";
+            case "NAVIGATION":
+                return "Navigation/Intents";
+            case "USE_CASE":
+                return "Use Case Diagram";
+            default:
+                return "All Components";
         }
     }
 
@@ -1512,8 +1701,7 @@ public class MainController implements Initializable {
         if (graphManager != null) {
             Map<String, Integer> stats = graphManager.getCategoryStats();
             StringBuilder statsText = new StringBuilder("Categories: ");
-            stats.forEach((category, count) ->
-                    statsText.append(category).append(": ").append(count).append("  "));
+            stats.forEach((category, count) -> statsText.append(category).append(": ").append(count).append("  "));
             categoryStatsLabel.setText(statsText.toString());
         }
     }
@@ -1573,46 +1761,59 @@ public class MainController implements Initializable {
     }
 
     private void handleAnalysisResult(AnalysisResult result) {
-        statusLabel.setText("Project analysis complete");
+        statusLabel.setText("Processing analysis results...");
 
-        componentMap.clear();
-        for (CodeComponent component : result.getComponents()) {
-            if (componentMap.containsKey(component.getId())) {
-                String uniqueId = component.getId() + "_" + System.currentTimeMillis();
-                component.setId(uniqueId);
+        // Perform heavy processing in background
+        CompletableFuture.runAsync(() -> {
+            // Thread-safe map update
+            synchronized (componentMap) {
+                componentMap.clear();
+                for (CodeComponent component : result.getComponents()) {
+                    if (componentMap.containsKey(component.getId())) {
+                        String uniqueId = component.getId() + "_" + System.currentTimeMillis();
+                        component.setId(uniqueId);
+                    }
+                    componentMap.put(component.getId(), component);
+                }
             }
-            componentMap.put(component.getId(), component);
-        }
 
-        try {
-            resolveDependencies(result.getComponents());
-        } catch (Exception e) {
-            System.err.println("Error resolving dependencies: " + e.getMessage());
-            statusLabel.setText("Warning: Some dependencies could not be resolved");
-        }
+            try {
+                resolveDependencies(result.getComponents());
+            } catch (Exception e) {
+                System.err.println("Error resolving dependencies: " + e.getMessage());
+            }
 
-        // Categorize components
-        graphManager.categorizeComponents(result.getComponents());
-        updateCategoryStats();
+            // Categorize components (CPU-bound)
+            graphManager.categorizeComponents(result.getComponents());
+        }).thenRun(() -> {
+            // Update UI on JavaFX thread
+            javafx.application.Platform.runLater(() -> {
+                statusLabel.setText("Updating UI...");
+                updateCategoryStats();
+                setViewMode("ALL");
+                updateComponentList();
+                updateProjectTreeWithRealData(result.getComponents());
 
-        // Show initial view
-        setViewMode("ALL");
+                // Update diagrams (already async internally)
+                updateDiagrams(result);
 
-        updateComponentList();
-        updateProjectTreeWithRealData(result.getComponents());
+                // Populate complexity statistics in Statistics tab
+                populateStatisticsTab(result.getComponents());
 
-        // Update diagrams
-        updateDiagrams(result);
+                // Generate project documentation
+                populateProjectDocumentation(result, currentProjectName);
 
-        // Populate complexity statistics in Statistics tab
-        populateStatisticsTab(result.getComponents());
-
-        // Generate project documentation
-        populateProjectDocumentation(result, currentProjectName);
-
-        handleResetZoom();
-        diagramScrollPane.setVvalue(0);
-        diagramScrollPane.setHvalue(0);
+                handleResetZoom();
+                diagramScrollPane.setVvalue(0);
+                diagramScrollPane.setHvalue(0);
+                statusLabel.setText("Project analysis complete");
+            });
+        }).exceptionally(ex -> {
+            javafx.application.Platform.runLater(() -> {
+                statusLabel.setText("Analysis processing failed: " + ex.getMessage());
+            });
+            return null;
+        });
     }
 
     /**
@@ -1638,15 +1839,19 @@ public class MainController implements Initializable {
         int lowComplexityMethods = 0;
 
         for (CodeComponent component : components) {
-            if (component.getMethods() == null) continue;
+            if (component.getMethods() == null)
+                continue;
             for (CodeMethod method : component.getMethods()) {
                 totalMethods++;
                 ComplexityInfo info = method.getComplexityInfo();
                 if (info != null) {
                     int severity = info.getSeverityLevel();
-                    if (severity == 3) highComplexityMethods++;
-                    else if (severity == 2) mediumComplexityMethods++;
-                    else lowComplexityMethods++;
+                    if (severity == 3)
+                        highComplexityMethods++;
+                    else if (severity == 2)
+                        mediumComplexityMethods++;
+                    else
+                        lowComplexityMethods++;
                 } else {
                     lowComplexityMethods++;
                 }
@@ -1657,11 +1862,10 @@ public class MainController implements Initializable {
         HBox summaryBox = new HBox(20);
         summaryBox.setStyle("-fx-padding: 10; -fx-background-color: #f0f4f8; -fx-background-radius: 8;");
         summaryBox.getChildren().addAll(
-            createStatCard("Total Methods", String.valueOf(totalMethods), "#3b82f6"),
-            createStatCard("🟢 Low (O(1), O(log n))", String.valueOf(lowComplexityMethods), "#10b981"),
-            createStatCard("🟡 Medium (O(n))", String.valueOf(mediumComplexityMethods), "#f59e0b"),
-            createStatCard("🔴 High (O(n²)+)", String.valueOf(highComplexityMethods), "#ef4444")
-        );
+                createStatCard("Total Methods", String.valueOf(totalMethods), "#3b82f6"),
+                createStatCard("🟢 Low (O(1), O(log n))", String.valueOf(lowComplexityMethods), "#10b981"),
+                createStatCard("🟡 Medium (O(n))", String.valueOf(mediumComplexityMethods), "#f59e0b"),
+                createStatCard("🔴 High (O(n²)+)", String.valueOf(highComplexityMethods), "#ef4444"));
         statisticsContainer.getChildren().add(summaryBox);
 
         // Separator
@@ -1673,7 +1877,8 @@ public class MainController implements Initializable {
         statisticsContainer.getChildren().add(detailLabel);
 
         for (CodeComponent component : components) {
-            if (component.getMethods() == null || component.getMethods().isEmpty()) continue;
+            if (component.getMethods() == null || component.getMethods().isEmpty())
+                continue;
 
             // Create component card
             VBox componentCard = createComponentComplexityCard(component);
@@ -1684,14 +1889,14 @@ public class MainController implements Initializable {
     private VBox createStatCard(String title, String value, String color) {
         VBox card = new VBox(5);
         card.setStyle("-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 8; " +
-                     "-fx-border-color: #e0e0e0; -fx-border-radius: 8;");
-        
+                "-fx-border-color: #e0e0e0; -fx-border-radius: 8;");
+
         Label valueLabel = new Label(value);
         valueLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
-        
+
         Label titleLabel = new Label(title);
         titleLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
-        
+
         card.getChildren().addAll(valueLabel, titleLabel);
         return card;
     }
@@ -1699,7 +1904,7 @@ public class MainController implements Initializable {
     private VBox createComponentComplexityCard(CodeComponent component) {
         VBox card = new VBox(8);
         card.setStyle("-fx-background-color: white; -fx-padding: 12; -fx-background-radius: 8; " +
-                     "-fx-border-color: #e0e0e0; -fx-border-radius: 8; -fx-margin: 5 0;");
+                "-fx-border-color: #e0e0e0; -fx-border-radius: 8; -fx-margin: 5 0;");
 
         // Find worst complexity for header
         String worstComplexity = "O(1)";
@@ -1718,19 +1923,19 @@ public class MainController implements Initializable {
         // Header
         HBox header = new HBox(10);
         header.setStyle("-fx-alignment: center-left;");
-        
+
         Label fileLabel = new Label("📄 " + component.getName());
         fileLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
-        
+
         javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
         HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
-        
+
         Label complexityBadge = new Label(emoji + " " + worstComplexity);
         String badgeColor = maxSeverity == 3 ? "#fef2f2" : (maxSeverity == 2 ? "#fffbeb" : "#f0fdf4");
         String textColor = maxSeverity == 3 ? "#dc2626" : (maxSeverity == 2 ? "#d97706" : "#16a34a");
         complexityBadge.setStyle("-fx-background-color: " + badgeColor + "; -fx-padding: 4 8; " +
-                                "-fx-background-radius: 4; -fx-font-weight: bold; -fx-text-fill: " + textColor + ";");
-        
+                "-fx-background-radius: 4; -fx-font-weight: bold; -fx-text-fill: " + textColor + ";");
+
         header.getChildren().addAll(fileLabel, spacer, complexityBadge);
         card.getChildren().add(header);
 
@@ -1767,26 +1972,35 @@ public class MainController implements Initializable {
                 if (plantUMLTextArea != null) {
                     // Enable AI for enhanced use case analysis
                     UseCaseDiagramGenerator useCaseGenerator = new UseCaseDiagramGenerator(true);
-                    
-                    // Initialize AI model asynchronously, then generate
+
                     statusLabel.setText(useCaseGenerator.getAIStatusMessage());
-                    
-                    // Generate with AI enhancement (synchronous for now)
-                    String useCasePuml = useCaseGenerator.generatePlantUMLWithAI(
-                        result.getComponents(), 
-                        result.getBusinessProcesses()
-                    );
-                    plantUMLTextArea.setText(useCasePuml);
-                    renderPlantUml(false);
-                    statusLabel.setText("Use Case diagram generated with AI analysis");
+                    statusLabel.setText("Wait... Generating AI Use Case Diagram...");
+
+                    CompletableFuture.supplyAsync(() -> {
+                        return useCaseGenerator.generatePlantUMLWithAI(
+                                result.getComponents(),
+                                result.getBusinessProcesses());
+                    }).thenAccept(useCasePuml -> {
+                        javafx.application.Platform.runLater(() -> {
+                            plantUMLTextArea.setText(useCasePuml);
+                            renderPlantUml(false);
+                            statusLabel.setText("Use Case diagram generated with AI analysis");
+                        });
+                    }).exceptionally(ex -> {
+                        javafx.application.Platform.runLater(() -> {
+                            statusLabel.setText("AI Generation Failed: " + ex.getMessage());
+                        });
+                        return null;
+                    });
                 }
                 // Clear Graphviz area since Use Case is PlantUML-only
                 if (graphvizTextArea != null) {
-                    graphvizTextArea.setText("// Use Case diagrams are rendered in PlantUML only.\n// Switch to another view mode to see Graphviz diagrams.");
+                    graphvizTextArea.setText(
+                            "// Use Case diagrams are rendered in PlantUML only.\n// Switch to another view mode to see Graphviz diagrams.");
                 }
                 return;
             }
-            
+
             // Default diagram generation for other modes
             if (plantUMLTextArea != null) {
                 String puml = buildCategorizedPlantUml(result.getComponents());
@@ -1811,7 +2025,7 @@ public class MainController implements Initializable {
         sb.append("skinparam linetype polyline\n");
         sb.append("skinparam nodesep 60\n");
         sb.append("skinparam ranksep 100\n");
-        sb.append("scale max 4096 width\n");
+        sb.append("scale max 16384 width\n");
         sb.append("skinparam backgroundColor #ffffff\n");
         sb.append("skinparam class {\n");
         sb.append("  BackgroundColor<<UI>> #e0f2fe\n");
@@ -1823,14 +2037,20 @@ public class MainController implements Initializable {
 
         // 1) Filter by current diagram view mode
         List<CodeComponent> filtered = components.stream().filter(c -> {
-            if (diagramViewMode == null || "ALL".equalsIgnoreCase(diagramViewMode)) return true;
+            if (diagramViewMode == null || "ALL".equalsIgnoreCase(diagramViewMode))
+                return true;
             String cat = detectComponentCategoryForDiagrams(c);
             switch (diagramViewMode) {
-                case "UI": return "UI".equals(cat);
-                case "DATA_MODEL": return "DataModel".equals(cat);
-                case "BUSINESS_LOGIC": return "BusinessLogic".equals(cat);
-                case "NAVIGATION": return "Navigation".equals(cat);
-                default: return true;
+                case "UI":
+                    return "UI".equals(cat);
+                case "DATA_MODEL":
+                    return "DataModel".equals(cat);
+                case "BUSINESS_LOGIC":
+                    return "BusinessLogic".equals(cat);
+                case "NAVIGATION":
+                    return "Navigation".equals(cat);
+                default:
+                    return true;
             }
         }).collect(Collectors.toList());
 
@@ -1864,7 +2084,8 @@ public class MainController implements Initializable {
         for (CodeComponent component : filtered) {
             if (component.getDependencies() != null) {
                 String fromId = sanitizeId(component.getId());
-                if (!includedIds.contains(fromId)) continue; // should be present anyway
+                if (!includedIds.contains(fromId))
+                    continue; // should be present anyway
                 for (CodeComponent dep : component.getDependencies()) {
                     String toId = sanitizeId(dep.getId());
                     if (!fromId.equals(toId) && includedIds.contains(toId)) {
@@ -1924,40 +2145,58 @@ public class MainController implements Initializable {
     }
 
     private String getCategoryColor(String category) {
-        if (category == null) return "#cccccc";
+        if (category == null)
+            return "#cccccc";
         switch (category) {
-            case "UI": return "#93c5fd";
-            case "DataModel": return "#fdba74";
-            case "BusinessLogic": return "#86efac";
-            case "Navigation": return "#f87171";
-            default: return "#cccccc";
+            case "UI":
+                return "#93c5fd";
+            case "DataModel":
+                return "#fdba74";
+            case "BusinessLogic":
+                return "#86efac";
+            case "Navigation":
+                return "#f87171";
+            default:
+                return "#cccccc";
         }
     }
 
     private String getCategoryFillColor(String category) {
-        if (category == null) return "#f2f2f2";
+        if (category == null)
+            return "#f2f2f2";
         switch (category) {
-            case "UI": return "#e0f2fe";
-            case "DataModel": return "#fff4e5";
-            case "BusinessLogic": return "#eaffea";
-            case "Navigation": return "#ffe0e0";
-            default: return "#f2f2f2";
+            case "UI":
+                return "#e0f2fe";
+            case "DataModel":
+                return "#fff4e5";
+            case "BusinessLogic":
+                return "#eaffea";
+            case "Navigation":
+                return "#ffe0e0";
+            default:
+                return "#f2f2f2";
         }
     }
 
     private String sanitizeId(String id) {
-        if (id == null) return "id_" + UUID.randomUUID().toString().replace('-', '_');
+        if (id == null)
+            return "id_" + UUID.randomUUID().toString().replace('-', '_');
         return id.replaceAll("[^A-Za-z0-9_]", "_");
     }
 
-    // In MainController.java - Replace detectComponentCategoryForDiagrams method with:
+    // In MainController.java - Replace detectComponentCategoryForDiagrams method
+    // with:
     private String detectComponentCategoryForDiagrams(CodeComponent component) {
         String category = ComponentCategorizer.detectCategory(component);
         // Convert to diagram format if needed
-        if ("DATA_MODEL".equals(category)) return "DataModel";
-        if ("BUSINESS_LOGIC".equals(category)) return "BusinessLogic";
-        if ("NAVIGATION".equals(category)) return "Navigation";
-        if ("UNKNOWN".equals(category)) return "Unknown";
+        if ("DATA_MODEL".equals(category))
+            return "DataModel";
+        if ("BUSINESS_LOGIC".equals(category))
+            return "BusinessLogic";
+        if ("NAVIGATION".equals(category))
+            return "Navigation";
+        if ("UNKNOWN".equals(category))
+            return "Unknown";
         return category;
     }
 }

@@ -12,10 +12,16 @@ public class CodeMethod {
     private boolean isStatic;
     private boolean isAbstract;
     private ComplexityInfo complexityInfo;
+    private List<String> annotations;
 
     public CodeMethod() {
         this.parameters = new ArrayList<>();
+        this.annotations = new ArrayList<>();
     }
+
+    public List<String> getAnnotations() { return annotations; }
+    public void setAnnotations(List<String> annotations) { this.annotations = annotations; }
+    public void addAnnotation(String annotation) { this.annotations.add(annotation); }
 
     // Getters and Setters
     public String getName() { return name; }
