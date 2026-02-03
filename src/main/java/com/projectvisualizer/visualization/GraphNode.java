@@ -274,7 +274,19 @@ public class GraphNode {
             list.addAll(getClassDependencies());
         }
 
-        return list.stream()
+        // Deduplicate by name - show each unique component name only once
+        java.util.Map<String, CodeComponent> uniqueByName = new java.util.LinkedHashMap<>();
+        for (CodeComponent c : list) {
+            String key = c.getName();
+            if (key == null || key.isEmpty()) {
+                key = c.getId();
+            }
+            if (!uniqueByName.containsKey(key)) {
+                uniqueByName.put(key, c);
+            }
+        }
+
+        return uniqueByName.values().stream()
                 .filter(c -> shouldShowInViewMode(c, currentViewMode))
                 .limit(12)
                 .collect(Collectors.toList());
@@ -318,9 +330,35 @@ public class GraphNode {
     private List<CodeComponent> getClassDependencies() {
         List<CodeComponent> classDependencies = new ArrayList<>();
 
+        // First, add dependencies from fields with their field names for better identification
+        if (component.getFields() != null) {
+            for (com.projectvisualizer.model.CodeField field : component.getFields()) {
+                if (field.getType() != null && field.getName() != null) {
+                    CodeComponent fieldComp = new CodeComponent();
+                    String fieldName = field.getName();
+                    String fieldType = field.getType();
+                    // Use "fieldName: Type" format for better identification
+                    fieldComp.setId("field:" + fieldName + ":" + fieldType);
+                    fieldComp.setName(fieldName + ": " + fieldType);
+                    fieldComp.setType(fieldType);
+                    fieldComp.setLayer(isUIType(fieldType) ? "UI" : null);
+                    classDependencies.add(fieldComp);
+                }
+            }
+        }
+
+        // Then add dependencies that don't match any field
         if (component.getDependencies() != null) {
             for (CodeComponent dep : component.getDependencies()) {
-                if (!isUIComponent(dep)) classDependencies.add(dep);
+                if (!isUIComponent(dep)) {
+                    // Check if this dependency already exists from fields
+                    String depName = dep.getName();
+                    boolean existsInFields = classDependencies.stream()
+                            .anyMatch(c -> c.getName() != null && c.getName().contains(depName));
+                    if (!existsInFields) {
+                        classDependencies.add(dep);
+                    }
+                }
             }
         }
 
@@ -343,6 +381,15 @@ public class GraphNode {
             }
         }
         return classDependencies;
+    }
+
+    private boolean isUIType(String type) {
+        if (type == null) return false;
+        String lowerType = type.toLowerCase();
+        return lowerType.contains("view") || lowerType.contains("text") || 
+               lowerType.contains("button") || lowerType.contains("image") ||
+               lowerType.contains("layout") || lowerType.contains("recycler") ||
+               lowerType.contains("adapter") || lowerType.contains("fragment");
     }
 
     private boolean checkInheritance(CodeComponent child) {

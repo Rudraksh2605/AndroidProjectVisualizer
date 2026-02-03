@@ -28,6 +28,7 @@ import javafx.util.Callback;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.Image;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.net.URL;
@@ -63,6 +64,14 @@ import com.itextpdf.io.font.constants.StandardFonts;
 import com.itextpdf.layout.element.Text;
 
 public class MainController implements Initializable {
+
+    // Static block to ensure PlantUML property is set before any PlantUML classes are loaded
+    static {
+        // Increase PlantUML rendering limit to prevent clipping of large diagrams
+        // 81920 is a very safe upper limit (approx 8x default 4096) to accommodate huge diagrams
+        System.setProperty("PLANTUML_LIMIT_SIZE", "81920");
+        // Also set Graphviz dot path if needed/custom, but usually auto-detected
+    }
 
     @FXML
     private VBox mainContainer;
@@ -143,7 +152,7 @@ public class MainController implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         // Increase PlantUML rendering limit to prevent clipping of large diagrams
-        System.setProperty("PLANTUML_LIMIT_SIZE", "16384");
+        // PlantUML limit is now set in static block to ensure it applies globally and early
 
         initializeGraphCanvas();
         initializeTreeView();
@@ -622,46 +631,95 @@ public class MainController implements Initializable {
         File file = fileChooser.showSaveDialog(mainContainer.getScene().getWindow());
         if (file != null) {
             try {
+                String fileName = file.getName().toLowerCase();
+                String extension = "";
+                if (fileName.endsWith(".png")) extension = "png";
+                else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) extension = "jpg";
+                else if (fileName.endsWith(".svg")) extension = "svg";
+
                 // Determine source based on active tab
                 Tab selectedTab = visualizationTabPane != null
                         ? visualizationTabPane.getSelectionModel().getSelectedItem()
                         : null;
-                Image imageToSave = null;
 
-                if (selectedTab == plantUMLImageTab && plantUMLImageView != null) {
-                    imageToSave = plantUMLImageView.getImage();
-                } else if (selectedTab == graphvizImageTab && graphvizImageView != null) {
-                    imageToSave = graphvizImageView.getImage();
+                if (extension.equals("svg")) {
+                    handleSvgExport(file, selectedTab);
                 } else {
-                    // Default to capturing the graph canvas
-                    if (graphCanvas != null) {
-                        WritableImage snapshot = graphCanvas.snapshot(new SnapshotParameters(), null);
-                        imageToSave = snapshot;
-                    }
+                    handleImageExport(file, selectedTab, extension);
                 }
-
-                if (imageToSave != null) {
-                    BufferedImage bufferedImage = SwingFXUtils.fromFXImage(imageToSave, null);
-                    String fileName = file.getName().toLowerCase();
-                    String format = "png";
-                    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-                        format = "jpg";
-                        // Convert transparent background to white for JPG
-                        BufferedImage newBufferedImage = new BufferedImage(bufferedImage.getWidth(),
-                                bufferedImage.getHeight(), BufferedImage.TYPE_INT_RGB);
-                        newBufferedImage.createGraphics().drawImage(bufferedImage, 0, 0, java.awt.Color.WHITE, null);
-                        bufferedImage = newBufferedImage;
-                    }
-
-                    ImageIO.write(bufferedImage, format, file);
-                    statusLabel.setText("Exported diagram to: " + file.getName());
-                } else {
-                    statusLabel.setText("Nothing to export (Image is null)");
-                }
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 statusLabel.setText("Export failed: " + ex.getMessage());
                 showErrorAlert("Export Failed", "Could not save image: " + ex.getMessage());
             }
+        }
+    }
+
+    private void handleSvgExport(File file, Tab selectedTab) throws IOException {
+        if (selectedTab == plantUMLImageTab) {
+            if (plantUMLTextArea == null || plantUMLTextArea.getText().isEmpty()) {
+                throw new IOException("No PlantUML source available to export.");
+            }
+            String puml = plantUMLTextArea.getText();
+            if (!puml.contains("@startuml")) {
+                puml = "@startuml\n" + puml + "\n@enduml";
+            }
+            SourceStringReader reader = new SourceStringReader(puml);
+            try (FileOutputStream os = new FileOutputStream(file)) {
+                reader.generateImage(os, new FileFormatOption(FileFormat.SVG));
+            }
+            statusLabel.setText("Exported PlantUML SVG to: " + file.getName());
+
+        } else if (selectedTab == graphvizImageTab) {
+            if (graphvizTextArea == null || graphvizTextArea.getText().isEmpty()) {
+                throw new IOException("No Graphviz source available to export.");
+            }
+            String dot = graphvizTextArea.getText();
+            String low = dot.toLowerCase();
+            if (!low.contains("digraph") && !low.contains("graph") && (dot.contains("->") || dot.contains("--"))) {
+                dot = "digraph G {\n" + dot + "\n}";
+            }
+            Graphviz.fromString(dot).render(Format.SVG).toFile(file);
+            statusLabel.setText("Exported Graphviz SVG to: " + file.getName());
+
+        } else {
+            // Fallback for canvas (not supported) or other tabs
+            showErrorAlert("Export Format Warning",
+                    "SVG export is only supported for PlantUML and Graphviz diagrams. " +
+                            "Please choose PNG or JPEG for this view.");
+        }
+    }
+
+    private void handleImageExport(File file, Tab selectedTab, String format) throws IOException {
+        Image imageToSave = null;
+
+        if (selectedTab == plantUMLImageTab && plantUMLImageView != null) {
+            imageToSave = plantUMLImageView.getImage();
+        } else if (selectedTab == graphvizImageTab && graphvizImageView != null) {
+            imageToSave = graphvizImageView.getImage();
+        } else {
+            // Default to capturing the graph canvas
+            if (graphCanvas != null) {
+                WritableImage snapshot = graphCanvas.snapshot(new SnapshotParameters(), null);
+                imageToSave = snapshot;
+            }
+        }
+
+        if (imageToSave != null) {
+            BufferedImage bufferedImage = SwingFXUtils.fromFXImage(imageToSave, null);
+
+            if (format.equals("jpg")) {
+                // Convert transparent background to white for JPG
+                BufferedImage newBufferedImage = new BufferedImage(bufferedImage.getWidth(),
+                        bufferedImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+                newBufferedImage.createGraphics().drawImage(bufferedImage, 0, 0, java.awt.Color.WHITE, null);
+                bufferedImage = newBufferedImage;
+            }
+
+            ImageIO.write(bufferedImage, format, file);
+            statusLabel.setText("Exported diagram to: " + file.getName());
+        } else {
+            statusLabel.setText("Nothing to export (Image is null)");
+            throw new IOException("No image data found to export.");
         }
     }
 
@@ -1017,6 +1075,7 @@ public class MainController implements Initializable {
 
                 // Add scale directive for higher resolution if not present
                 if (!puml.contains("scale ")) {
+                    // Start with scale 2 to make the base diagram 2x larger (higher resolution)
                     puml = puml.replace("@startuml", "@startuml\nscale 2");
                 }
 
