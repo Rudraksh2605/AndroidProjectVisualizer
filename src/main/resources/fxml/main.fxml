@@ -229,6 +229,26 @@
                     </VBox>
                 </Tab>
 
+                <Tab text="🧭 Navigation Flow" fx:id="navigationFlowTab" styleClass="main-tab">
+                    <VBox spacing="0" VBox.vgrow="ALWAYS">
+                        <HBox styleClass="preview-toolbar" alignment="CENTER_LEFT" spacing="8">
+                            <ComboBox fx:id="navFlowProcessFilter" value="All Processes" styleClass="filter-dropdown" prefWidth="140"/>
+                            <Separator orientation="VERTICAL"/>
+                            <Button text="Zoom In" styleClass="action-btn" onAction="#handleZoomInNavFlow"/>
+                            <Button text="Zoom Out" styleClass="action-btn" onAction="#handleZoomOutNavFlow"/>
+                            <Button text="Reset" styleClass="action-btn" onAction="#handleResetZoomNavFlow"/>
+                            <Button text="Fit to View" styleClass="action-btn" onAction="#handleFitNavFlowToView"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Export Image" styleClass="primary-btn" onAction="#handleExportNavFlowImage"/>
+                        </HBox>
+                        <ScrollPane fx:id="navFlowScrollPane" VBox.vgrow="ALWAYS" pannable="true" fitToHeight="false" fitToWidth="false">
+                            <StackPane fx:id="navFlowImageContainer" style="-fx-min-width: 100; -fx-min-height: 100;">
+                                <ImageView fx:id="navFlowImageView" preserveRatio="true"/>
+                            </StackPane>
+                        </ScrollPane>
+                    </VBox>
+                </Tab>
+
                 <Tab text="Graphviz Preview" fx:id="graphvizImageTab" styleClass="main-tab">
                     <VBox spacing="0" VBox.vgrow="ALWAYS">
                         <HBox styleClass="preview-toolbar" alignment="CENTER_LEFT" spacing="8">

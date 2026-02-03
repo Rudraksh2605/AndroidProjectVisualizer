@@ -36,6 +36,7 @@ public class Main extends Application {
         primaryStage.setOnCloseRequest(event -> {
             shutdownAllServices();
             Platform.exit();
+            System.exit(0); // Force terminate all threads
         });
 
         // Register JVM shutdown hook as a fallback
@@ -52,6 +53,7 @@ public class Main extends Application {
         System.out.println("Application stopping - cleaning up resources...");
         shutdownAllServices();
         super.stop();
+        System.exit(0); // Ensure JVM terminates
     }
 
     /**

@@ -48,6 +48,7 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import com.projectvisualizer.services.ComponentCategorizer;
 import com.projectvisualizer.visualization.UseCaseDiagramGenerator;
+import com.projectvisualizer.visualization.ActivityDiagramGenerator;
 import javax.imageio.ImageIO;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.image.WritableImage;
@@ -116,6 +117,18 @@ public class MainController implements Initializable {
     private VBox projectDocsContainer;
     @FXML
     private Label projectDocsStatusLabel;
+
+    // Navigation Flow tab elements
+    @FXML
+    private Tab navigationFlowTab;
+    @FXML
+    private ImageView navFlowImageView;
+    @FXML
+    private ScrollPane navFlowScrollPane;
+    @FXML
+    private StackPane navFlowImageContainer;
+    @FXML
+    private ComboBox<String> navFlowProcessFilter;
 
     @FXML
     private Label zoomLabel;
@@ -1368,6 +1381,80 @@ public class MainController implements Initializable {
         statusLabel.setText("Graphviz fitted to view: " + (int) (graphvizZoom * 100) + "%");
     }
 
+    // Navigation Flow tab zoom state
+    private double navFlowZoom = 1.0;
+
+    @FXML
+    private void handleZoomInNavFlow() {
+        navFlowZoom = Math.min(navFlowZoom * 1.25, 5.0);
+        applyNavFlowZoom();
+        statusLabel.setText("Navigation Flow zoom: " + (int) (navFlowZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleZoomOutNavFlow() {
+        navFlowZoom = Math.max(navFlowZoom / 1.25, 0.2);
+        applyNavFlowZoom();
+        statusLabel.setText("Navigation Flow zoom: " + (int) (navFlowZoom * 100) + "%");
+    }
+
+    @FXML
+    private void handleResetZoomNavFlow() {
+        navFlowZoom = 1.0;
+        applyNavFlowZoom();
+        statusLabel.setText("Navigation Flow zoom reset");
+    }
+
+    @FXML
+    private void handleFitNavFlowToView() {
+        if (navFlowImageView == null || navFlowScrollPane == null)
+            return;
+        Image img = navFlowImageView.getImage();
+        if (img == null)
+            return;
+
+        double imgWidth = img.getWidth();
+        double imgHeight = img.getHeight();
+        if (imgWidth <= 0 || imgHeight <= 0)
+            return;
+
+        double viewportWidth = navFlowScrollPane.getViewportBounds().getWidth();
+        double viewportHeight = navFlowScrollPane.getViewportBounds().getHeight();
+
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            viewportWidth = navFlowScrollPane.getWidth() - 20;
+            viewportHeight = navFlowScrollPane.getHeight() - 20;
+        }
+
+        double scaleX = viewportWidth / imgWidth;
+        double scaleY = viewportHeight / imgHeight;
+        double fitScale = Math.min(scaleX, scaleY);
+        fitScale = Math.max(0.1, Math.min(fitScale, 2.0));
+
+        navFlowZoom = fitScale;
+        applyNavFlowZoom();
+        statusLabel.setText("Navigation Flow fitted to view: " + (int) (navFlowZoom * 100) + "%");
+    }
+
+    private void applyNavFlowZoom() {
+        if (navFlowImageView == null)
+            return;
+        Image img = navFlowImageView.getImage();
+        if (img == null)
+            return;
+        double baseW = img.getWidth();
+        double baseH = img.getHeight();
+        if (baseW <= 0 || baseH <= 0)
+            return;
+        navFlowImageView.setFitWidth(baseW * navFlowZoom);
+        navFlowImageView.setFitHeight(baseH * navFlowZoom);
+    }
+
+    @FXML
+    private void handleExportNavFlowImage() {
+        handleExportEnhancedDiagram();
+    }
+
     private void handleComponentSelection(TreeItem<String> selectedItem) {
         if (selectedItem == null || selectedItem.getValue() == null)
             return;
@@ -2071,8 +2158,67 @@ public class MainController implements Initializable {
                 graphvizTextArea.setText(dot);
                 renderGraphviz(false);
             }
+
+            // Generate Navigation Flow Diagram
+            generateNavigationFlowDiagram(result);
         } catch (Exception e) {
             statusLabel.setText("Failed to generate diagrams: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generates and renders the Navigation Flow (Activity) diagram.
+     */
+    private void generateNavigationFlowDiagram(AnalysisResult result) {
+        if (navFlowImageView == null) {
+            System.err.println("Navigation Flow ImageView not bound");
+            return;
+        }
+
+        CompletableFuture.supplyAsync(() -> {
+            ActivityDiagramGenerator generator = new ActivityDiagramGenerator();
+            return generator.generatePlantUML(result.getComponents(), result.getNavigationFlows());
+        }).thenAccept(plantUmlCode -> {
+            javafx.application.Platform.runLater(() -> {
+                renderNavigationFlowDiagram(plantUmlCode);
+            });
+        }).exceptionally(ex -> {
+            javafx.application.Platform.runLater(() -> {
+                statusLabel.setText("Navigation Flow diagram failed: " + ex.getMessage());
+            });
+            return null;
+        });
+    }
+
+    /**
+     * Renders a PlantUML Activity Diagram to the Navigation Flow tab's ImageView.
+     */
+    private void renderNavigationFlowDiagram(String plantUmlCode) {
+        if (plantUmlCode == null || plantUmlCode.isEmpty()) {
+            statusLabel.setText("No navigation flow data to render");
+            return;
+        }
+
+        try {
+            SourceStringReader reader = new SourceStringReader(plantUmlCode);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            reader.outputImage(baos, new FileFormatOption(FileFormat.PNG));
+            baos.close();
+
+            byte[] imageData = baos.toByteArray();
+            if (imageData.length > 0) {
+                Image image = new Image(new ByteArrayInputStream(imageData));
+                navFlowImageView.setImage(image);
+                navFlowImageView.setPreserveRatio(true);
+                navFlowZoom = 1.0;
+                applyNavFlowZoom();
+                statusLabel.setText("Navigation Flow diagram rendered");
+            } else {
+                statusLabel.setText("Navigation Flow diagram is empty");
+            }
+        } catch (Exception e) {
+            statusLabel.setText("Navigation Flow render error: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
